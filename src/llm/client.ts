@@ -50,6 +50,7 @@ export interface StructuredCallOptions<T> {
  */
 export async function callStructured<T>(opts: StructuredCallOptions<T>): Promise<T> {
   if (isLocalModel(opts.model)) return callStructuredLocal(opts);
+  if (isClaudeCliModel(opts.model)) return callStructuredCli(opts);
   const cachedBlocks = (opts.cachedContext ?? []).map((b, i, arr) => ({
     type: "text" as const,
     text: `## ${b.label}\n${b.text}`,
@@ -88,6 +89,7 @@ export async function callText(opts: {
   maxTokens?: number;
 }): Promise<string> {
   if (isLocalModel(opts.model)) return callTextLocal(opts);
+  if (isClaudeCliModel(opts.model)) return callTextCli(opts);
   const cachedBlocks = (opts.cachedContext ?? []).map((b, i, arr) => ({
     type: "text" as const,
     text: `## ${b.label}\n${b.text}`,
@@ -131,8 +133,16 @@ export function zodToJsonSchema(schema: z.ZodType): Record<string, unknown> {
       return { type: "array", items: zodToJsonSchema(anyDef.type as z.ZodType) };
     case "ZodString":
       return { type: "string" };
-    case "ZodNumber":
-      return { type: "number" };
+    case "ZodNumber": {
+      const out: Record<string, unknown> = { type: "number" };
+      const checks = (anyDef.checks ?? []) as { kind: string; value?: number }[];
+      for (const c of checks) {
+        if (c.kind === "min") out.minimum = c.value;
+        if (c.kind === "max") out.maximum = c.value;
+        if (c.kind === "int") out.type = "integer";
+      }
+      return out;
+    }
     case "ZodBoolean":
       return { type: "boolean" };
     case "ZodEnum":
@@ -234,4 +244,73 @@ async function callTextLocal(opts: {
 }): Promise<string> {
   const system = [opts.system, ...(opts.cachedContext ?? []).map((b) => `## ${b.label}\n${b.text}`)].join("\n\n");
   return (await localChat(opts.model, system, opts.userPrompt, opts.maxTokens ?? 1500, false)).trim();
+}
+
+// ---- Claude Code CLI provider (subscription-billed) ----
+//
+// Model ids prefixed `claude-cli:` shell out to the locally-installed `claude` binary
+// in headless print mode (`claude -p --output-format json`) instead of the API. Auth
+// comes from the CLI's own login, so calls draw on the Claude plan's usage limits
+// rather than API billing — no ANTHROPIC_API_KEY needed. Each invocation is stateless
+// (fresh context every call), and `--max-turns 1` keeps it a pure completion: no tools,
+// no file access, no agentic behavior. `claude-cli:sonnet` → `claude -p --model sonnet`;
+// any alias/model id the CLI accepts works after the prefix.
+//
+// ANTHROPIC_API_KEY is stripped from the child env so a placeholder key in .env can't
+// silently switch the CLI to (broken or unintended) API billing.
+
+export function isClaudeCliModel(model: string): boolean {
+  return model.startsWith("claude-cli:");
+}
+
+async function claudeCliChat(model: string, system: string, user: string): Promise<string> {
+  const { execFile } = await import("node:child_process");
+  const cliModel = model.slice("claude-cli:".length) || "sonnet";
+  const childEnv = { ...process.env };
+  delete childEnv.ANTHROPIC_API_KEY;
+
+  return new Promise<string>((res, rej) => {
+    const child = execFile(
+      "claude",
+      ["-p", "--output-format", "json", "--model", cliModel, "--max-turns", "1"],
+      { env: childEnv, timeout: 300_000, maxBuffer: 16 * 1024 * 1024 },
+      (err, stdout, stderr) => {
+        if (err) {
+          return rej(new Error(`claude CLI failed: ${err.message}\n${String(stderr).slice(0, 500)}`));
+        }
+        try {
+          const parsed = JSON.parse(stdout) as { result?: string; is_error?: boolean };
+          if (parsed.is_error) return rej(new Error(`claude CLI error: ${parsed.result?.slice(0, 500)}`));
+          res(parsed.result ?? "");
+        } catch {
+          rej(new Error(`claude CLI returned unparseable output: ${String(stdout).slice(0, 300)}`));
+        }
+      },
+    );
+    // Prompt goes over stdin so long JDs never hit argv length limits.
+    child.stdin?.write(`${system}\n\n---\n\n${user}`);
+    child.stdin?.end();
+  });
+}
+
+async function callStructuredCli<T>(opts: StructuredCallOptions<T>): Promise<T> {
+  const schema = zodToJsonSchema(opts.tool.schema);
+  const system = [
+    opts.system,
+    ...(opts.cachedContext ?? []).map((b) => `## ${b.label}\n${b.text}`),
+    `Respond with ONLY a JSON object that matches this JSON schema — no prose, no markdown fences:\n${JSON.stringify(schema)}`,
+  ].join("\n\n");
+  const raw = await claudeCliChat(opts.model, system, opts.userPrompt);
+  return opts.tool.schema.parse(JSON.parse(extractJson(raw)));
+}
+
+async function callTextCli(opts: {
+  model: string;
+  system: string;
+  cachedContext?: CachedBlock[];
+  userPrompt: string;
+  maxTokens?: number;
+}): Promise<string> {
+  const system = [opts.system, ...(opts.cachedContext ?? []).map((b) => `## ${b.label}\n${b.text}`)].join("\n\n");
+  return (await claudeCliChat(opts.model, system, opts.userPrompt)).trim();
 }

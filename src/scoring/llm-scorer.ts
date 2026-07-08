@@ -39,6 +39,7 @@ export interface VariantSummary {
 }
 
 const SYSTEM = `You are a rigorous hiring-fit evaluator for a specific candidate.
+Score each dimension on a 0-100 scale (100 = perfect fit).
 Score honestly — a low score is more useful than an inflated one. Never claim the
 candidate has experience not supported by their profile. Put JD keywords the
 candidate genuinely supports in matchedKeywords, and important JD keywords they
