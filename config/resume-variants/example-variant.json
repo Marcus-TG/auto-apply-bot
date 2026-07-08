@@ -1,0 +1,36 @@
+{
+  "id": "growth-marketing",
+  "label": "Growth Marketing Lead",
+  "targetRoles": ["growth marketing", "performance marketing", "demand generation"],
+  "summary": "Growth marketer who turns paid + lifecycle channels into predictable pipeline. 8 years scaling B2B SaaS acquisition.",
+  "skills": ["Paid acquisition", "SEO/SEM", "Lifecycle marketing", "Analytics (GA4, SQL)", "A/B testing", "Marketing automation"],
+  "experiences": [
+    {
+      "company": "Acme SaaS",
+      "title": "Senior Growth Marketing Manager",
+      "location": "Toronto, ON",
+      "start": "2021-03",
+      "end": null,
+      "bulletPool": [
+        { "id": "acme-1", "text": "Grew inbound signups 42% YoY by rebuilding the paid search + landing page funnel.", "tags": ["paid acquisition", "sem", "cro"], "impact": 9 },
+        { "id": "acme-2", "text": "Cut blended CAC 28% by shifting spend to high-intent channels using attribution modelling.", "tags": ["paid acquisition", "analytics", "attribution"], "impact": 8 },
+        { "id": "acme-3", "text": "Launched a lifecycle email program that lifted trial-to-paid conversion 15%.", "tags": ["lifecycle marketing", "email", "automation"], "impact": 7 },
+        { "id": "acme-4", "text": "Built a self-serve GA4 + SQL reporting layer adopted by the whole marketing team.", "tags": ["analytics", "ga4", "sql"], "impact": 6 }
+      ]
+    },
+    {
+      "company": "Startup Co",
+      "title": "Marketing Manager",
+      "location": "Remote",
+      "start": "2018-06",
+      "end": "2021-02",
+      "bulletPool": [
+        { "id": "sc-1", "text": "First marketing hire; established acquisition channels from zero to $2M ARR contribution.", "tags": ["demand generation", "paid acquisition"], "impact": 9 },
+        { "id": "sc-2", "text": "Ran 60+ landing-page A/B tests, lifting conversion rate from 1.8% to 3.1%.", "tags": ["cro", "a/b testing"], "impact": 7 }
+      ]
+    }
+  ],
+  "education": [
+    { "school": "University of Toronto", "credential": "BComm, Marketing", "year": "2016" }
+  ]
+}

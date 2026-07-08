@@ -1,0 +1,19 @@
+node_modules/
+dist/
+*.log
+
+# Local secrets and config
+.env
+.env.local
+config/profile.json
+config/resume-variants/*.json
+!config/resume-variants/example-variant.json
+
+# Runtime data & generated artifacts
+data/
+artifacts/
+*.sqlite
+*.sqlite-*
+
+# OS
+.DS_Store

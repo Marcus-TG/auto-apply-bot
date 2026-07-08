@@ -1,0 +1,39 @@
+{
+  "name": "auto-apply · approval gate",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "approval",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Approval card in",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "approval"
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.NOTIFY_FROM }}",
+        "toEmail": "={{ $env.NOTIFY_TO }}",
+        "subject": "=Review: {{ $json.body.job.title }} @ {{ $json.body.job.company }} (fit {{ $json.body.score.overall }})",
+        "emailFormat": "html",
+        "html": "=<h2>{{ $json.body.job.title }} — {{ $json.body.job.company }}</h2><p><b>Fit {{ $json.body.score.overall }}/100</b> · confidence {{ $json.body.score.confidence }}</p><p>{{ $json.body.score.summary }}</p><p><b>Strengths:</b> {{ $json.body.matched.join(', ') }}<br><b>Gaps:</b> {{ $json.body.gaps.join(', ') }}</p><hr><h3>Cover letter</h3><pre>{{ $json.body.coverLetterText }}</pre><hr><p><a href=\"{{ $json.body.approveUrl }}\">✅ Approve &amp; submit</a> &nbsp;|&nbsp; <a href=\"{{ $json.body.rejectUrl }}\">❌ Reject</a></p><p>Resume PDF: {{ $json.body.resumePath }}</p>"
+      },
+      "id": "email",
+      "name": "Send review email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [520, 300]
+    }
+  ],
+  "connections": {
+    "Approval card in": { "main": [[{ "node": "Send review email", "type": "main", "index": 0 }]] }
+  },
+  "settings": {},
+  "meta": {
+    "note": "Receives the ApprovalCard POSTed by the worker (set N8N_APPROVAL_WEBHOOK to this webhook's URL). Swap the email node for Telegram/Slack if preferred; the approve/reject links are plain URLs that work anywhere. For a true blocking gate, insert a 'Wait' node set to resume on webhook and route the resume URL as a third action."
+  }
+}

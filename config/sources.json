@@ -1,0 +1,40 @@
+{
+  "sources": [
+    {
+      "kind": "greenhouse",
+      "enabled": true,
+      "companies": ["stripe", "anthropic", "figma"],
+      "notes": "Board token = the slug in boards.greenhouse.io/<token>. Public JSON API."
+    },
+    {
+      "kind": "lever",
+      "enabled": true,
+      "companies": ["netflix", "spotify"],
+      "notes": "Company handle = the slug in jobs.lever.co/<handle>. Public JSON API."
+    },
+    {
+      "kind": "ashby",
+      "enabled": true,
+      "companies": ["ramp", "linear"],
+      "notes": "Org name = jobs.ashbyhq.com/<org>. Public JSON API."
+    },
+    {
+      "kind": "workday",
+      "enabled": false,
+      "companies": [],
+      "notes": "Public boards expose a JSON endpoint per tenant; needs a host + tenant per company."
+    },
+    {
+      "kind": "linkedin",
+      "enabled": false,
+      "queries": ["senior marketing manager remote canada"],
+      "notes": "ToS-RESTRICTED. Requires ENABLE_LINKEDIN=true AND this flag. Browser-scraped. Ban risk."
+    },
+    {
+      "kind": "indeed",
+      "enabled": false,
+      "queries": ["growth marketing remote"],
+      "notes": "ToS-RESTRICTED. Requires ENABLE_INDEED=true AND this flag. Browser-scraped. Ban risk."
+    }
+  ]
+}

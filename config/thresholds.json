@@ -1,0 +1,14 @@
+{
+  "applyFloor": 55,
+  "reviewFloor": 75,
+  "autoApplyEnabled": false,
+  "minConfidenceForAuto": 0.7,
+  "weights": {
+    "skills_match": 0.3,
+    "domain_match": 0.2,
+    "seniority_match": 0.2,
+    "compensation_growth": 0.15,
+    "culture_logistics": 0.15
+  },
+  "approvalTimeoutHours": 48
+}

@@ -1,0 +1,44 @@
+{
+  "identity": {
+    "fullName": "Jane Candidate",
+    "email": "jane@example.com",
+    "phone": "+1-555-0100",
+    "location": "Toronto, ON, Canada",
+    "links": {
+      "linkedin": "https://linkedin.com/in/janecandidate",
+      "portfolio": "https://janecandidate.com",
+      "github": null
+    }
+  },
+  "preferences": {
+    "remote": ["remote", "hybrid"],
+    "locations": ["Toronto", "Remote - Canada", "Remote - North America"],
+    "minSalary": 110000,
+    "salaryCurrency": "CAD",
+    "seniority": ["senior", "lead", "staff"],
+    "mustHaveKeywords": [],
+    "excludeKeywords": ["unpaid", "commission-only"],
+    "excludeCompanies": []
+  },
+  "workAuthorization": {
+    "authorizedIn": ["Canada"],
+    "requiresSponsorship": false
+  },
+  "eeo": {
+    "note": "Optional demographic answers. Leave any field null to have the bot pause and ask rather than guess.",
+    "gender": null,
+    "race": null,
+    "veteranStatus": null,
+    "disabilityStatus": null
+  },
+  "commonAnswers": {
+    "willingToRelocate": false,
+    "noticePeriod": "2 weeks",
+    "howDidYouHear": "Company website",
+    "desiredSalary": "Competitive / open to discussion"
+  },
+  "voice": {
+    "note": "A short sample of the user's own writing so cover letters sound like them, not like an LLM.",
+    "sample": "I lead with outcomes, not adjectives. I write in plain, direct sentences and I'd rather say 'grew signups 40%' than 'passionate about growth.' A little dry humour is fine; buzzwords are not."
+  }
+}

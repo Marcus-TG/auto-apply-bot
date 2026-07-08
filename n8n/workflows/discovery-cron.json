@@ -1,0 +1,75 @@
+{
+  "name": "auto-apply · discovery cron",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hoursInterval": 6 }] }
+      },
+      "id": "schedule",
+      "name": "Every 6h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WORKER_BASE_URL }}/run/discover",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "x-webhook-secret", "value": "={{ $env.WEBHOOK_SECRET }}" }] }
+      },
+      "id": "discover",
+      "name": "POST /run/discover",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WORKER_BASE_URL }}/run/score",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "x-webhook-secret", "value": "={{ $env.WEBHOOK_SECRET }}" }] }
+      },
+      "id": "score",
+      "name": "POST /run/score",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [720, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WORKER_BASE_URL }}/run/tailor",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "x-webhook-secret", "value": "={{ $env.WEBHOOK_SECRET }}" }] }
+      },
+      "id": "tailor",
+      "name": "POST /run/tailor",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WORKER_BASE_URL }}/run/sweep",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "x-webhook-secret", "value": "={{ $env.WEBHOOK_SECRET }}" }] }
+      },
+      "id": "sweep",
+      "name": "POST /run/sweep",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 300]
+    }
+  ],
+  "connections": {
+    "Every 6h": { "main": [[{ "node": "POST /run/discover", "type": "main", "index": 0 }]] },
+    "POST /run/discover": { "main": [[{ "node": "POST /run/score", "type": "main", "index": 0 }]] },
+    "POST /run/score": { "main": [[{ "node": "POST /run/tailor", "type": "main", "index": 0 }]] },
+    "POST /run/tailor": { "main": [[{ "node": "POST /run/sweep", "type": "main", "index": 0 }]] }
+  },
+  "settings": {},
+  "meta": { "note": "Set WORKER_BASE_URL and WEBHOOK_SECRET as n8n env vars. Tailoring emits approval cards to the approval workflow's webhook." }
+}

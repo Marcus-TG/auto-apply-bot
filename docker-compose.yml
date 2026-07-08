@@ -1,0 +1,30 @@
+# Self-hosted browser backend (kernel-images) for BROWSER_PROVIDER=kernel-selfhost.
+#
+# This is a STARTING POINT. Build the image from https://github.com/kernel/kernel-images
+# first (see docs/KERNEL-SELF-HOST.md) and set `image:` to the tag it produces
+# (e.g. kernel-docker). Ports mirror what the container exposes.
+services:
+  browser:
+    image: kernel-docker # built via kernel-images/images/chromium-headful/build-docker.sh
+    environment:
+      ENABLE_WEBRTC: "true"
+      WITH_KERNEL_IMAGES_API: "true" # enables the recording API on :10001
+    ports:
+      - "9222:9222"   # Chrome DevTools Protocol — the bot connects here
+      - "8080:8080"   # live view (noVNC / WebRTC) — human takeover / CAPTCHA
+      - "10001:10001" # recording API — session replays
+    shm_size: "2gb"   # Chromium needs generous /dev/shm
+    restart: unless-stopped
+
+# Optional: run n8n alongside. Uncomment if you don't already have an instance.
+#  n8n:
+#    image: docker.n8n.io/n8nio/n8n
+#    ports:
+#      - "5678:5678"
+#    environment:
+#      WORKER_BASE_URL: "http://host.docker.internal:8787"
+#      WEBHOOK_SECRET: "change-me"
+#    volumes:
+#      - n8n_data:/home/node/.n8n
+#volumes:
+#  n8n_data:
