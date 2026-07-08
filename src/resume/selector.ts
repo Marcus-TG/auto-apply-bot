@@ -10,7 +10,8 @@ import type { VariantSummary } from "../scoring/llm-scorer.js";
 const DIR = resolve(process.cwd(), "config/resume-variants");
 
 export function loadVariants(): ResumeVariant[] {
-  const files = readdirSync(DIR).filter((f) => f.endsWith(".json"));
+  // Skip example-*.json — those are templates shipped with the repo, not real variants.
+  const files = readdirSync(DIR).filter((f) => f.endsWith(".json") && !f.startsWith("example"));
   return files.map((f) => ResumeVariant.parse(JSON.parse(readFileSync(resolve(DIR, f), "utf8"))));
 }
 

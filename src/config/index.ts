@@ -14,6 +14,19 @@ function readJson(relPath: string): unknown {
   return JSON.parse(readFileSync(resolve(ROOT, relPath), "utf8"));
 }
 
+/** Read the first JSON file that exists. Lets user-local config (gitignored)
+ *  shadow the committed example, same pattern as profile.json. */
+function readJsonFirst(relPaths: string[]): unknown {
+  for (const rel of relPaths) {
+    try {
+      return readJson(rel);
+    } catch {
+      /* try next */
+    }
+  }
+  throw new Error(`None of these config files could be read: ${relPaths.join(", ")}`);
+}
+
 const bool = (v: string | undefined, dflt: boolean) =>
   v === undefined ? dflt : v.toLowerCase() === "true";
 
@@ -87,7 +100,9 @@ const env = {
 export const config = {
   env,
   thresholds: ThresholdsSchema.parse(readJson("config/thresholds.json")),
-  sources: SourcesSchema.parse(readJson("config/sources.json")).sources,
+  sources: SourcesSchema.parse(
+    readJsonFirst(["config/sources.json", "config/sources.example.json"]),
+  ).sources,
 };
 
 export type AppConfig = typeof config;

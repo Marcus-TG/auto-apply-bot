@@ -35,11 +35,26 @@ runs on **local Chromium**, **self-hosted Kernel** (`kernel-images`, Apache-2.0)
 ```bash
 npm install
 npx playwright install chromium
-cp .env.example .env                                  # set ANTHROPIC_API_KEY
+cp .env.example .env                                  # pick your LLM provider (below)
 cp config/profile.example.json config/profile.json    # fill in your details
+cp config/sources.example.json config/sources.json    # companies to poll
 npm run db:init
 npm run pipeline        # runs discover → score → tailor → (submit; DRY_RUN by default)
 ```
+
+### Bring your own LLM
+
+Model ids route by prefix — mix providers per stage via `MODEL_PREFILTER` /
+`MODEL_GENERATION` in `.env`:
+
+| Model id | Provider | Cost |
+|---|---|---|
+| `claude-sonnet-5`, `claude-haiku-...` | Anthropic API (`ANTHROPIC_API_KEY`) | API billing |
+| `claude-cli:sonnet` | Your logged-in Claude Code CLI (headless) | Claude subscription usage |
+| `ollama:qwen3-coder:30b`, `local:...` | Any OpenAI-compatible endpoint (`LOCAL_LLM_BASE_URL`) | free/local |
+
+A good split: high-volume fit-scoring on a local model, generation on a strong
+hosted model.
 
 Nothing submits until you set `DRY_RUN=false`, and high-fit jobs always wait for
 your approval. Full walkthrough: [docs/RUNBOOK.md](docs/RUNBOOK.md).

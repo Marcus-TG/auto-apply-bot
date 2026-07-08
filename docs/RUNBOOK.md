@@ -7,11 +7,10 @@ npm install
 npx playwright install chromium      # browser for PDF render + local apply
 cp .env.example .env                  # then set ANTHROPIC_API_KEY, WEBHOOK_SECRET
 cp config/profile.example.json config/profile.json   # then fill in your real details
+cp config/sources.example.json config/sources.json   # then set your company board tokens
 # add your real resume variants under config/resume-variants/*.json
 npm run db:init
 ```
-
-Edit `config/sources.json` with the company board tokens you want to track.
 
 ## Running
 
