@@ -53,11 +53,10 @@ export function resumeToHtml(r: RenderedResume, name: string): string {
   </body></html>`;
 }
 
-// One-page hard limit: US Letter is 8.5x11in = 816x1056 CSS px at 96dpi.
-// Height must be measured at PRINT width — a wider screen viewport wraps less
-// text and under-counts. Small slack absorbs screen/print rounding drift.
-const LETTER_WIDTH_PX = 816;
-const ONE_PAGE_PX = 1046;
+// One-page hard limit, judged by the actual PDF: screen-pixel estimates drift
+// from print layout in both directions, so we count pages in the rendered PDF
+// itself and trim until it is 1.
+const MAX_PAGES = 1;
 /** Never trim below this many total bullets — better slightly long than empty. */
 const MIN_BULLETS = 6;
 
@@ -92,24 +91,30 @@ export async function renderResumePdf(
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage();
-    await page.setViewportSize({ width: LETTER_WIDTH_PX, height: 1056 });
     let html = resumeToHtml(fitted, name);
     await page.setContent(html, { waitUntil: "load" });
 
-    // String-form evaluate: `document` only exists in the browser context, and
-    // the project tsconfig deliberately excludes the DOM lib.
-    const pageHeight = async () => Number(await page.evaluate("document.documentElement.scrollHeight"));
-    while ((await pageHeight()) > ONE_PAGE_PX) {
+    // Chromium PDFs contain one "/Type /Page" object per page ("/Type /Pages"
+    // is the tree root — exclude it).
+    const renderAndCountPages = async (): Promise<{ pdf: Buffer; pages: number }> => {
+      const pdf = await page.pdf({ format: "Letter", printBackground: true });
+      const pages = (pdf.toString("latin1").match(/\/Type\s*\/Page(?!s)/g) ?? []).length;
+      return { pdf, pages };
+    };
+
+    let out = await renderAndCountPages();
+    while (out.pages > MAX_PAGES) {
       const total = fitted.experiences.reduce((a, e) => a + e.bullets.length, 0);
       if (total <= MIN_BULLETS || !dropOneBullet(fitted)) break;
       trimmedBullets++;
       html = resumeToHtml(fitted, name);
       await page.setContent(html, { waitUntil: "load" });
+      out = await renderAndCountPages();
     }
 
     writeFileSync(jsonPath, JSON.stringify(fitted, null, 2));
     writeFileSync(htmlPath, html);
-    await page.pdf({ path: pdfPath, format: "Letter", printBackground: true });
+    writeFileSync(pdfPath, out.pdf);
   } finally {
     await browser.close();
   }
