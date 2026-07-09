@@ -11,6 +11,7 @@ export async function fillLever(
   page: Page,
   fields: ApplicantFields,
   resumePath: string,
+  coverLetter?: { path: string; text: string },
 ): Promise<FillOutcome> {
   const set = async (selector: string, value: string) => {
     const el = page.locator(selector).first();
@@ -23,6 +24,12 @@ export async function fillLever(
 
   const resume = page.locator('input[name="resume"], input[type="file"]').first();
   if (await resume.count()) await resume.setInputFiles(resumePath).catch(() => {});
+
+  // Lever's free-text "Additional information" box is the cover letter slot.
+  if (coverLetter) {
+    const textarea = page.locator('textarea[name="comments"], textarea[name*="cover" i]').first();
+    if (await textarea.count()) await textarea.fill(coverLetter.text).catch(() => {});
+  }
 
   return fillGeneric(page, fields, resumePath);
 }

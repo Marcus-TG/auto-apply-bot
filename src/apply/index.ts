@@ -63,7 +63,7 @@ export async function submitApplication(
       return await runAgenticApplication(page, job, app, fields, session.liveViewUrl);
     }
 
-    const outcome = await runFiller(ats, page, fields, app.resumePath);
+    const outcome = await runFiller(ats, page, fields, app);
 
     // Anything unresolved → stop and ask the human. Never submit a partial form.
     if (!outcome.ready) {
@@ -107,15 +107,16 @@ async function runFiller(
   ats: string,
   page: Page,
   fields: ApplicantFields,
-  resumePath: string,
+  app: TailoredApplication,
 ): Promise<FillOutcome> {
+  const coverLetter = { path: app.coverLetterPath, text: app.coverLetterText };
   switch (ats) {
     case "greenhouse":
-      return fillGreenhouse(page, fields, resumePath);
+      return fillGreenhouse(page, fields, app.resumePath, coverLetter);
     case "lever":
-      return fillLever(page, fields, resumePath);
+      return fillLever(page, fields, app.resumePath, coverLetter);
     default:
-      return fillGeneric(page, fields, resumePath);
+      return fillGeneric(page, fields, app.resumePath);
   }
 }
 
