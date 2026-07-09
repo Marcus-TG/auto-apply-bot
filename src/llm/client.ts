@@ -298,7 +298,17 @@ export function isClaudeCliModel(model: string): boolean {
 }
 
 async function claudeCliChat(model: string, system: string, user: string): Promise<string> {
+  // One retry absorbs transient CLI failures (usage-limit blips, network).
+  try {
+    return await claudeCliChatOnce(model, system, user);
+  } catch {
+    return claudeCliChatOnce(model, system, user);
+  }
+}
+
+async function claudeCliChatOnce(model: string, system: string, user: string): Promise<string> {
   const { execFile } = await import("node:child_process");
+  const { tmpdir } = await import("node:os");
   const cliModel = model.slice("claude-cli:".length) || "sonnet";
   const childEnv = { ...process.env };
   delete childEnv.ANTHROPIC_API_KEY;
@@ -306,10 +316,21 @@ async function claudeCliChat(model: string, system: string, user: string): Promi
   return new Promise<string>((res, rej) => {
     const child = execFile(
       "claude",
+      // --system-prompt REPLACES the Claude Code agent persona — without it the
+      // model narrates like an agent ("Let me check...") instead of completing.
       // --tools "" disables all tools: without it the model can burn its single
       // allowed turn on a tool call (error_max_turns) instead of answering.
-      ["-p", "--output-format", "json", "--model", cliModel, "--max-turns", "1", "--tools", ""],
-      { env: childEnv, timeout: 300_000, maxBuffer: 16 * 1024 * 1024 },
+      // cwd is a neutral temp dir so no project CLAUDE.md/memory contaminates.
+      [
+        "-p",
+        "--output-format", "json",
+        "--model", cliModel,
+        "--max-turns", "1",
+        "--tools", "",
+        "--no-session-persistence",
+        "--system-prompt", `${system}\n\nOutput ONLY the requested content itself: no preamble, no commentary about what you are doing, no markdown headers or code fences.`,
+      ],
+      { env: childEnv, cwd: tmpdir(), timeout: 300_000, maxBuffer: 16 * 1024 * 1024 },
       (err, stdout, stderr) => {
         if (err) {
           // The CLI reports errors on stdout as result JSON (with is_error) at
@@ -329,8 +350,8 @@ async function claudeCliChat(model: string, system: string, user: string): Promi
         }
       },
     );
-    // Prompt goes over stdin so long JDs never hit argv length limits.
-    child.stdin?.write(`${system}\n\n---\n\n${user}`);
+    // User prompt goes over stdin so long JDs never hit argv length limits.
+    child.stdin?.write(user);
     child.stdin?.end();
   });
 }

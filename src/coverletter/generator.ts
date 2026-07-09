@@ -22,6 +22,8 @@ interface Identity {
 const SYSTEM = `You write cover letters that sound like a real, specific person.
 Rules:
 - Ground every claim in the provided resume content; introduce no new facts.
+- Never state durations, dates, or metrics (e.g. "six years at X") unless they
+  appear verbatim in the provided content.
 - Reference something concrete about THIS role/company from the job description.
 - Match the candidate's voice sample. No buzzwords, no "I am passionate about", no
   generic filler. Prefer concrete outcomes over adjectives.
@@ -30,6 +32,27 @@ Rules:
 
 /** Em/en dashes read as machine-generated; normalize them out of free text. */
 const scrubDashes = (s: string) => s.replace(/\s*—\s*/g, ", ").replace(/\s+–\s+/g, ", ");
+
+/** Strip wrapper artifacts models sometimes emit around the letter itself:
+ *  code fences, leading/trailing "---" rules, markdown title lines, and short
+ *  meta lead-ins like "Here's the revised letter:". */
+function cleanLetter(s: string): string {
+  let text = s.replace(/```[a-z]*\n?/gi, "").trim();
+  const lines = text.split("\n");
+  while (lines.length) {
+    const first = lines[0]!.trim();
+    const isMeta =
+      first === "" ||
+      first === "---" ||
+      /^#{1,4}\s/.test(first) ||
+      /^\*\*[^*]+\*\*$/.test(first) ||
+      (first.length < 120 && /letter/i.test(first) && /[:.]$/.test(first));
+    if (!isMeta) break;
+    lines.shift();
+  }
+  while (lines.length && ["", "---"].includes(lines[lines.length - 1]!.trim())) lines.pop();
+  return lines.join("\n").trim();
+}
 
 export async function generateCoverLetter(
   job: JobPosting,
@@ -61,7 +84,7 @@ ${job.description.slice(0, 4000)}`,
   });
 
   // Self-critique pass: tighten and de-buzzword.
-  const final = scrubDashes(
+  const final = cleanLetter(scrubDashes(
     await callText({
       model,
       system:
@@ -72,7 +95,12 @@ ${job.description.slice(0, 4000)}`,
       userPrompt: draft,
       maxTokens: 700,
     }),
-  );
+  ));
+
+  // A letter that still looks like model scaffolding must fail loudly, not ship.
+  if (final.length < 200 || final.includes("```") || /\bLet me\b|\bI need to find\b/.test(final)) {
+    throw new Error(`cover letter failed sanity check: ${final.slice(0, 120)}`);
+  }
 
   const dir = resolve(process.cwd(), config.env.artifactsDir, job.id);
   mkdirSync(dir, { recursive: true });
