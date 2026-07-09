@@ -13,7 +13,7 @@ import { runDiscovery } from "../discovery/index.js";
 import { scoreJob, type CandidateProfile } from "../scoring/index.js";
 import { loadVariants, variantSummaries, getVariant } from "../resume/selector.js";
 import { tailorResume } from "../resume/tailor.js";
-import { renderResumePdf } from "../resume/render.js";
+import { renderResumePdf, resumeIdentityFromProfile } from "../resume/render.js";
 import { generateCoverLetter } from "../coverletter/generator.js";
 import { requestApproval } from "../approval/index.js";
 import { notifyN8n } from "../approval/notify.js";
@@ -94,7 +94,11 @@ export async function tailorScoredJobs(baseUrl: string) {
       jobs.setStatus(job.id, "tailoring");
       const variant = getVariant(variants, score.recommendedVariant);
       const rendered = await tailorResume(job, variant, score);
-      const { pdfPath, jsonPath } = await renderResumePdf(rendered, profile.identity, job.id);
+      const { pdfPath, jsonPath } = await renderResumePdf(
+        rendered,
+        resumeIdentityFromProfile(profile.identity),
+        job.id,
+      );
       const letter = await generateCoverLetter(job, rendered, score, profile.identity, profile.voice.sample);
 
       const app: TailoredApplication = {

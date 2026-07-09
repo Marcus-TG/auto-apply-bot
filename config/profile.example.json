@@ -8,6 +8,11 @@
       "linkedin": "https://linkedin.com/in/janecandidate",
       "portfolio": "https://janecandidate.com",
       "github": null
+    },
+    "resumeContact": {
+      "note": "Optional: what the resume PDF header shows (forms still use all links). Omit to show everything.",
+      "includePhone": true,
+      "links": ["linkedin", "portfolio", "github"]
     }
   },
   "preferences": {

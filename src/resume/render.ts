@@ -29,6 +29,36 @@ export interface ResumeIdentity {
 /** "https://marcusstrauss.dev/" → "marcusstrauss.dev" for display. */
 const displayUrl = (u: string) => u.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "");
 
+/**
+ * Build the resume-header identity from profile.identity, honoring the optional
+ * `resumeContact` prefs: { includePhone?: boolean, links?: string[] } — `links`
+ * whitelists which identity.links keys appear on the resume. Everything stays in
+ * the profile for form-filling; this only controls what the PDF shows.
+ */
+export function resumeIdentityFromProfile(identity: {
+  fullName: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  links?: Record<string, string | null>;
+  resumeContact?: { includePhone?: boolean; links?: string[] };
+}): ResumeIdentity {
+  const rc = identity.resumeContact ?? {};
+  const links: Record<string, string | null> = { ...(identity.links ?? {}) };
+  if (Array.isArray(rc.links)) {
+    for (const key of Object.keys(links)) {
+      if (!rc.links.includes(key)) delete links[key];
+    }
+  }
+  return {
+    fullName: identity.fullName,
+    email: identity.email,
+    phone: rc.includePhone === false ? undefined : identity.phone,
+    location: identity.location,
+    links,
+  };
+}
+
 export function resumeToHtml(r: RenderedResume, identity: ResumeIdentity): string {
   const contactParts = [
     identity.email && `<a href="mailto:${esc(identity.email)}">${esc(identity.email)}</a>`,
