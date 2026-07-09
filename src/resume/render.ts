@@ -29,6 +29,9 @@ export interface ResumeIdentity {
 /** "https://marcusstrauss.dev/" → "marcusstrauss.dev" for display. */
 const displayUrl = (u: string) => u.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "");
 
+/** Dates display as years only ("2024-03" → "2024"); data keeps the month. */
+const dateYear = (s: string) => s.slice(0, 4);
+
 /**
  * Build the resume-header identity from profile.identity, honoring the optional
  * `resumeContact` prefs: { includePhone?: boolean, links?: string[] } — `links`
@@ -73,7 +76,7 @@ export function resumeToHtml(r: RenderedResume, identity: ResumeIdentity): strin
       (e) => `
     <section class="exp">
       <div class="row"><strong>${esc(e.title)}</strong><span>${esc(e.company)}${e.location ? " · " + esc(e.location) : ""}</span></div>
-      <div class="dates">${esc(e.start)} – ${e.end ? esc(e.end) : "Present"}</div>
+      <div class="dates">${esc(dateYear(e.start))}${e.end && dateYear(e.end) === dateYear(e.start) ? "" : ` – ${e.end ? esc(dateYear(e.end)) : "Present"}`}</div>
       <ul>${e.bullets.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>
     </section>`,
     )

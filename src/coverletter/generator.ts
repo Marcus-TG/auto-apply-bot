@@ -25,7 +25,11 @@ Rules:
 - Reference something concrete about THIS role/company from the job description.
 - Match the candidate's voice sample. No buzzwords, no "I am passionate about", no
   generic filler. Prefer concrete outcomes over adjectives.
+- Never use em dashes or en dashes; use commas, colons, or separate sentences.
 - 3 short paragraphs, ~200-250 words. No "Dear Hiring Manager" cliché opener unless natural.`;
+
+/** Em/en dashes read as machine-generated; normalize them out of free text. */
+const scrubDashes = (s: string) => s.replace(/\s*—\s*/g, ", ").replace(/\s+–\s+/g, ", ");
 
 export async function generateCoverLetter(
   job: JobPosting,
@@ -57,15 +61,18 @@ ${job.description.slice(0, 4000)}`,
   });
 
   // Self-critique pass: tighten and de-buzzword.
-  const final = await callText({
-    model,
-    system:
-      "Revise the cover letter to remove any buzzwords, clichés, or generic claims, " +
-      "keep only concrete points grounded in the resume, and preserve the candidate's voice. " +
-      "Return only the revised letter.",
-    userPrompt: draft,
-    maxTokens: 700,
-  });
+  const final = scrubDashes(
+    await callText({
+      model,
+      system:
+        "Revise the cover letter to remove any buzzwords, clichés, or generic claims, " +
+        "keep only concrete points grounded in the resume, and preserve the candidate's voice. " +
+        "Never use em dashes or en dashes; use commas, colons, or separate sentences. " +
+        "Return only the revised letter.",
+      userPrompt: draft,
+      maxTokens: 700,
+    }),
+  );
 
   const dir = resolve(process.cwd(), config.env.artifactsDir, job.id);
   mkdirSync(dir, { recursive: true });
