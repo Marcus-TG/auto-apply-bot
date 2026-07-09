@@ -16,7 +16,28 @@ function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-export function resumeToHtml(r: RenderedResume, name: string): string {
+/** The parts of profile.identity the resume header renders. Everything except
+ *  fullName is optional so partial profiles still render. */
+export interface ResumeIdentity {
+  fullName: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  links?: Record<string, string | null>;
+}
+
+/** "https://marcusstrauss.dev/" → "marcusstrauss.dev" for display. */
+const displayUrl = (u: string) => u.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "");
+
+export function resumeToHtml(r: RenderedResume, identity: ResumeIdentity): string {
+  const contactParts = [
+    identity.email && `<a href="mailto:${esc(identity.email)}">${esc(identity.email)}</a>`,
+    identity.phone && esc(identity.phone),
+    identity.location && esc(identity.location),
+    ...Object.values(identity.links ?? {})
+      .filter((u): u is string => !!u)
+      .map((u) => `<a href="${esc(u)}">${esc(displayUrl(u))}</a>`),
+  ].filter(Boolean);
   const exp = r.experiences
     .map(
       (e) => `
@@ -41,8 +62,11 @@ export function resumeToHtml(r: RenderedResume, name: string): string {
     li{margin:2px 0}
     .skills{font-size:10.5pt}
     .exp{margin-bottom:10px}
+    .contact{font-size:9.5pt;color:#333;margin:0 0 10px}
+    .contact a{color:#333;text-decoration:none}
   </style></head><body>
-    <h1>${esc(name)}</h1>
+    <h1>${esc(identity.fullName)}</h1>
+    <p class="contact">${contactParts.join(" &nbsp;·&nbsp; ")}</p>
     <p class="summary">${esc(r.summary)}</p>
     <h2>Skills</h2>
     <p class="skills">${r.skills.map(esc).join(" · ")}</p>
@@ -74,7 +98,7 @@ function dropOneBullet(r: RenderedResume): boolean {
  *  resume fits ONE page. Returns the PDF path. */
 export async function renderResumePdf(
   r: RenderedResume,
-  name: string,
+  identity: ResumeIdentity,
   jobId: string,
 ): Promise<{ pdfPath: string; jsonPath: string; trimmedBullets: number }> {
   const dir = resolve(process.cwd(), config.env.artifactsDir, jobId);
@@ -91,7 +115,7 @@ export async function renderResumePdf(
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage();
-    let html = resumeToHtml(fitted, name);
+    let html = resumeToHtml(fitted, identity);
     await page.setContent(html, { waitUntil: "load" });
 
     // Chromium PDFs contain one "/Type /Page" object per page ("/Type /Pages"
@@ -107,7 +131,7 @@ export async function renderResumePdf(
       const total = fitted.experiences.reduce((a, e) => a + e.bullets.length, 0);
       if (total <= MIN_BULLETS || !dropOneBullet(fitted)) break;
       trimmedBullets++;
-      html = resumeToHtml(fitted, name);
+      html = resumeToHtml(fitted, identity);
       await page.setContent(html, { waitUntil: "load" });
       out = await renderAndCountPages();
     }

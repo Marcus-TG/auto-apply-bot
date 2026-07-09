@@ -94,7 +94,7 @@ export async function tailorScoredJobs(baseUrl: string) {
       jobs.setStatus(job.id, "tailoring");
       const variant = getVariant(variants, score.recommendedVariant);
       const rendered = await tailorResume(job, variant, score);
-      const { pdfPath, jsonPath } = await renderResumePdf(rendered, profile.identity.fullName, job.id);
+      const { pdfPath, jsonPath } = await renderResumePdf(rendered, profile.identity, job.id);
       const letter = await generateCoverLetter(job, rendered, score, profile.identity, profile.voice.sample);
 
       const app: TailoredApplication = {
