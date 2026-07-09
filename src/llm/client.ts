@@ -192,6 +192,17 @@ function extractJson(text: string): string {
   return start >= 0 && end > start ? body.slice(start, end + 1) : body;
 }
 
+// LOCAL_LLM_BASE_URL may be a comma-separated pool ("http://a:11434/v1,http://b:11434/v1").
+// Calls round-robin across endpoints (parallel scoring spreads over all machines) and
+// fail over to the next endpoint on error, so one box going down doesn't stall a run.
+let rr = 0;
+function localEndpoints(): string[] {
+  return config.env.localLlmBaseUrl
+    .split(",")
+    .map((s) => s.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+}
+
 async function localChat(
   model: string,
   system: string,
@@ -199,7 +210,30 @@ async function localChat(
   maxTokens: number,
   jsonMode: boolean,
 ): Promise<string> {
-  const res = await fetch(`${config.env.localLlmBaseUrl}/chat/completions`, {
+  const pool = localEndpoints();
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < pool.length; attempt++) {
+    const base = pool[(rr + attempt) % pool.length]!;
+    try {
+      const out = await localChatOnce(base, model, system, user, maxTokens, jsonMode);
+      rr = (rr + attempt + 1) % pool.length;
+      return out;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
+async function localChatOnce(
+  baseUrl: string,
+  model: string,
+  system: string,
+  user: string,
+  maxTokens: number,
+  jsonMode: boolean,
+): Promise<string> {
+  const res = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
