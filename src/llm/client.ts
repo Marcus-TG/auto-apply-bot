@@ -306,11 +306,19 @@ async function claudeCliChat(model: string, system: string, user: string): Promi
   return new Promise<string>((res, rej) => {
     const child = execFile(
       "claude",
-      ["-p", "--output-format", "json", "--model", cliModel, "--max-turns", "1"],
+      // --tools "" disables all tools: without it the model can burn its single
+      // allowed turn on a tool call (error_max_turns) instead of answering.
+      ["-p", "--output-format", "json", "--model", cliModel, "--max-turns", "1", "--tools", ""],
       { env: childEnv, timeout: 300_000, maxBuffer: 16 * 1024 * 1024 },
       (err, stdout, stderr) => {
         if (err) {
-          return rej(new Error(`claude CLI failed: ${err.message}\n${String(stderr).slice(0, 500)}`));
+          // The CLI reports errors on stdout as result JSON (with is_error) at
+          // least as often as on stderr — surface both.
+          return rej(
+            new Error(
+              `claude CLI failed: ${err.message.split("\n")[0]}\nstderr: ${String(stderr).slice(0, 400)}\nstdout: ${String(stdout).slice(0, 400)}`,
+            ),
+          );
         }
         try {
           const parsed = JSON.parse(stdout) as { result?: string; is_error?: boolean };
