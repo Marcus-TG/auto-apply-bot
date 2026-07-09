@@ -23,7 +23,7 @@ initSchema();
 const app = express();
 app.use(express.json({ limit: "1mb" }));
 
-const baseUrl = () => `http://localhost:${config.env.port}`;
+const baseUrl = () => config.env.publicBaseUrl || `http://localhost:${config.env.port}`;
 
 function requireSecret(req: express.Request, res: express.Response, next: express.NextFunction) {
   if (req.header("x-webhook-secret") !== config.env.webhookSecret) {

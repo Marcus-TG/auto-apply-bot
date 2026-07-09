@@ -69,6 +69,9 @@ const env = {
   databasePath: process.env.DATABASE_PATH ?? "./data/app.sqlite",
   artifactsDir: process.env.ARTIFACTS_DIR ?? "./artifacts",
   port: Number(process.env.PORT ?? 8787),
+  // Where approve/reject links point. Empty → http://localhost:PORT (links
+  // then only work on the server itself).
+  publicBaseUrl: process.env.PUBLIC_BASE_URL ?? "",
   webhookSecret: process.env.WEBHOOK_SECRET ?? "change-me",
   n8nApprovalWebhook: process.env.N8N_APPROVAL_WEBHOOK ?? "",
   browserProvider: (process.env.BROWSER_PROVIDER ?? "local") as
