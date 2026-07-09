@@ -177,6 +177,14 @@ export const approvals = {
       .run(decision, now(), note ?? null, id);
     return row.job_id;
   },
+  /** The not-yet-decided approval for a job, if any (newest first). */
+  pendingForJob(jobId: string): { id: string; expires_at: string } | undefined {
+    return db()
+      .prepare(
+        `SELECT id, expires_at FROM approvals WHERE job_id=? AND decision IS NULL ORDER BY requested_at DESC LIMIT 1`,
+      )
+      .get(jobId) as { id: string; expires_at: string } | undefined;
+  },
   expirePending(): { id: string; job_id: string }[] {
     const rows = db()
       .prepare(

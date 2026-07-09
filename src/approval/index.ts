@@ -20,6 +20,8 @@ export interface ApprovalCard {
   coverLetterText: string;
   approveUrl: string;
   rejectUrl: string;
+  /** Human review page: score breakdown + cover letter + embedded resume PDF. */
+  reviewUrl: string;
   expiresAt: string;
 }
 
@@ -46,6 +48,7 @@ export function requestApproval(job: JobPosting, baseUrl: string): ApprovalCard 
     coverLetterText: app.coverLetterText,
     approveUrl: `${baseUrl}/approval/${id}/approve`,
     rejectUrl: `${baseUrl}/approval/${id}/reject`,
+    reviewUrl: `${baseUrl}/review/${job.id}`,
     expiresAt,
   };
 }

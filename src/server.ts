@@ -7,9 +7,12 @@
  * Auth is a shared secret header (x-webhook-secret) for the trigger routes; the
  * approval GET links are unguessable UUIDs so they work as one-click email links.
  */
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import express from "express";
 import { config } from "./config/index.js";
 import { initSchema } from "./store/db.js";
+import { jobs, scores, applications, approvals } from "./store/repositories.js";
 import {
   discover,
   scoreNewJobs,
@@ -42,6 +45,79 @@ app.post("/run/tailor", requireSecret, async (_req, res) => res.json(await tailo
 app.post("/run/submit", requireSecret, async (_req, res) => res.json(await submitApproved()));
 app.post("/run/all", requireSecret, async (_req, res) => res.json(await runPipeline(baseUrl())));
 app.post("/run/sweep", requireSecret, (_req, res) => res.json({ expired: sweepExpiredApprovals() }));
+
+// --- human review surface (job ids are content hashes; server is LAN-only) ---
+const ARTIFACT_FILES = new Set(["resume.pdf", "cover-letter.txt", "resume.json"]);
+app.get("/artifacts/:jobId/:file", (req, res) => {
+  const { jobId, file } = req.params;
+  if (!/^[0-9a-f]{16}$/.test(jobId) || !ARTIFACT_FILES.has(file)) {
+    res.status(404).send("not found");
+    return;
+  }
+  const path = resolve(process.cwd(), config.env.artifactsDir, jobId, file);
+  if (!existsSync(path)) {
+    res.status(404).send("not found");
+    return;
+  }
+  res.sendFile(path);
+});
+
+const esc = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+app.get("/review/:jobId", (req, res) => {
+  const jobId = req.params.jobId;
+  const job = jobs.get(jobId);
+  const score = scores.get(jobId);
+  const application = applications.get(jobId);
+  if (!job || !score || !application) {
+    res.status(404).send("No reviewable application for this job.");
+    return;
+  }
+  const approval = approvals.pendingForJob(jobId);
+  const decide = approval
+    ? `<a class="btn ok" href="${baseUrl()}/approval/${approval.id}/approve">✅ Approve &amp; submit</a>
+       <a class="btn no" href="${baseUrl()}/approval/${approval.id}/reject">❌ Reject</a>
+       <span class="muted">expires ${esc(approval.expires_at)}</span>`
+    : `<span class="muted">No pending approval (status: ${esc(job.status)}).</span>`;
+  const dims = score.dimensions
+    .map((d) => `<tr><td>${esc(d.name)}</td><td><b>${d.score}</b></td><td>${esc(d.rationale)}</td></tr>`)
+    .join("");
+
+  res.send(`<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(job.title)} @ ${esc(job.company)}</title>
+<style>
+  body{font-family:system-ui,sans-serif;margin:0;background:#f5f5f4;color:#1c1917}
+  main{max-width:900px;margin:0 auto;padding:16px}
+  .card{background:#fff;border-radius:10px;padding:16px 20px;margin:12px 0;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  h1{font-size:1.3rem;margin:0} h2{font-size:1rem;margin:0 0 8px}
+  .muted{color:#78716c;font-size:.85rem}
+  .btn{display:inline-block;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600;margin-right:8px}
+  .ok{background:#16a34a;color:#fff} .no{background:#dc2626;color:#fff}
+  table{border-collapse:collapse;width:100%;font-size:.9rem}
+  td{border-top:1px solid #e7e5e4;padding:6px 8px;vertical-align:top}
+  pre{white-space:pre-wrap;font-family:Georgia,serif;font-size:.95rem;line-height:1.5}
+  iframe{width:100%;height:75vh;border:1px solid #d6d3d1;border-radius:8px;background:#fff}
+  .tag{display:inline-block;background:#e7e5e4;border-radius:99px;padding:2px 10px;margin:2px;font-size:.8rem}
+</style></head><body><main>
+  <div class="card">
+    <h1>${esc(job.title)} — ${esc(job.company)}</h1>
+    <p class="muted">Fit <b>${score.overall}/100</b> · confidence ${score.confidence} · variant ${esc(application.variantId)} · <a href="${esc(job.url)}">posting ↗</a></p>
+    <p>${esc(score.summary)}</p>
+    <p>${decide}</p>
+  </div>
+  <div class="card"><h2>Score breakdown</h2><table>${dims}</table>
+    <p><b>Strengths:</b> ${score.matchedKeywords.map((k) => `<span class="tag">${esc(k)}</span>`).join("")}</p>
+    <p><b>Gaps:</b> ${score.gapKeywords.map((k) => `<span class="tag">${esc(k)}</span>`).join("")}</p>
+  </div>
+  <div class="card"><h2>Cover letter</h2><pre>${esc(application.coverLetterText)}</pre></div>
+  <div class="card"><h2>Resume (as submitted)</h2>
+    <iframe src="${baseUrl()}/artifacts/${jobId}/resume.pdf"></iframe>
+    <p class="muted"><a href="${baseUrl()}/artifacts/${jobId}/resume.pdf">open PDF directly</a></p>
+  </div>
+</main></body></html>`);
+});
 
 // --- approval webhooks (one-click links from the notification) ---
 app.get("/approval/:id/:decision", (req, res) => {
