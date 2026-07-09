@@ -53,30 +53,65 @@ export function resumeToHtml(r: RenderedResume, name: string): string {
   </body></html>`;
 }
 
-/** Write the HTML and render a PDF next to it. Returns the PDF path. */
+// One-page hard limit: US Letter is 8.5x11in = 816x1056 CSS px at 96dpi.
+// Height must be measured at PRINT width — a wider screen viewport wraps less
+// text and under-counts. Small slack absorbs screen/print rounding drift.
+const LETTER_WIDTH_PX = 816;
+const ONE_PAGE_PX = 1046;
+/** Never trim below this many total bullets — better slightly long than empty. */
+const MIN_BULLETS = 6;
+
+/** Drop the last bullet of the experience that currently shows the most.
+ *  The tailor orders bullets most-relevant-first, so tails are the cheapest cut. */
+function dropOneBullet(r: RenderedResume): boolean {
+  const candidates = r.experiences.filter((e) => e.bullets.length > 1);
+  if (!candidates.length) return false;
+  const longest = candidates.reduce((a, b) => (b.bullets.length > a.bullets.length ? b : a));
+  longest.bullets.pop();
+  return true;
+}
+
+/** Write the HTML and render a PDF next to it, trimming bullets until the
+ *  resume fits ONE page. Returns the PDF path. */
 export async function renderResumePdf(
   r: RenderedResume,
   name: string,
   jobId: string,
-): Promise<{ pdfPath: string; jsonPath: string }> {
+): Promise<{ pdfPath: string; jsonPath: string; trimmedBullets: number }> {
   const dir = resolve(process.cwd(), config.env.artifactsDir, jobId);
   mkdirSync(dir, { recursive: true });
   const jsonPath = resolve(dir, "resume.json");
   const htmlPath = resolve(dir, "resume.html");
   const pdfPath = resolve(dir, "resume.pdf");
-  writeFileSync(jsonPath, JSON.stringify(r, null, 2));
-  const html = resumeToHtml(r, name);
-  writeFileSync(htmlPath, html);
+
+  const fitted: RenderedResume = structuredClone(r);
+  let trimmedBullets = 0;
 
   // Lazy import so environments without browsers installed can still build/typecheck.
   const { chromium } = await import("playwright");
   const browser = await chromium.launch();
   try {
     const page = await browser.newPage();
+    await page.setViewportSize({ width: LETTER_WIDTH_PX, height: 1056 });
+    let html = resumeToHtml(fitted, name);
     await page.setContent(html, { waitUntil: "load" });
+
+    // String-form evaluate: `document` only exists in the browser context, and
+    // the project tsconfig deliberately excludes the DOM lib.
+    const pageHeight = async () => Number(await page.evaluate("document.documentElement.scrollHeight"));
+    while ((await pageHeight()) > ONE_PAGE_PX) {
+      const total = fitted.experiences.reduce((a, e) => a + e.bullets.length, 0);
+      if (total <= MIN_BULLETS || !dropOneBullet(fitted)) break;
+      trimmedBullets++;
+      html = resumeToHtml(fitted, name);
+      await page.setContent(html, { waitUntil: "load" });
+    }
+
+    writeFileSync(jsonPath, JSON.stringify(fitted, null, 2));
+    writeFileSync(htmlPath, html);
     await page.pdf({ path: pdfPath, format: "Letter", printBackground: true });
   } finally {
     await browser.close();
   }
-  return { pdfPath, jsonPath };
+  return { pdfPath, jsonPath, trimmedBullets };
 }

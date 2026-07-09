@@ -29,7 +29,9 @@ const SYSTEM = `You tailor a resume by SELECTING which pre-approved bullets to s
 for a given job and in what order — you do NOT write new bullets. Pick the bullets
 whose tags/impact best match the job. Return bullet IDs only. You may write a single
 tailored summary line, but it must only reference skills already in the variant.
-Never state or imply experience the candidate does not have.`;
+Never state or imply experience the candidate does not have.
+The resume must fit ONE page: select at most 12 bullets total, weighted toward the
+most relevant experiences (the renderer trims overflow from the tail, so order matters).`;
 
 export async function tailorResume(
   job: JobPosting,
