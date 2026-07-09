@@ -90,6 +90,10 @@ export async function submitApplication(
     }
     await submitBtn.click();
     await page.waitForLoadState("networkidle").catch(() => {});
+    await page.waitForTimeout(2000);
+
+    // Post-submit screenshot: ground truth for "did it actually go through".
+    await page.screenshot({ path: app.resumePath.replace(/resume\.pdf$/, "postsubmit.png"), fullPage: true }).catch(() => {});
 
     const confirmation = await readConfirmation(page);
     submissions.record(job.id, confirmation);
@@ -122,7 +126,7 @@ async function runFiller(
 
 async function readConfirmation(page: Page): Promise<string | null> {
   const body = (await page.content()).toLowerCase();
-  if (/thank you|application (received|submitted)|we('|’)ve received/.test(body)) {
+  if (/thank you|application (has been |was )?(received|submitted)|we('|’)ve received|successfully (submitted|applied)/.test(body)) {
     return page.url();
   }
   return null;

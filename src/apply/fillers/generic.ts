@@ -47,6 +47,42 @@ export async function fillGeneric(
       continue;
     }
     await el.fill(value);
+    // React-style comboboxes (Greenhouse custom questions) commit the typed
+    // match via keyboard selection; plain inputs ignore the extra keys.
+    if ((await el.getAttribute("role")) === "combobox" || (await el.getAttribute("aria-autocomplete"))) {
+      await page.waitForTimeout(400);
+      await el.press("ArrowDown").catch(() => {});
+      await el.press("Enter").catch(() => {});
+    }
+    await humanPause();
+  }
+
+  // Native dropdowns: match the answer against the option labels.
+  const selects = page.locator("select");
+  const nSel = await selects.count();
+  for (let i = 0; i < nSel; i++) {
+    const el = selects.nth(i);
+    const required = (await el.getAttribute("required")) !== null || (await el.getAttribute("aria-required")) === "true";
+    const label = await labelFor(page, el);
+    if (!label) {
+      if (required) unresolved.push("(unlabelled required select)");
+      continue;
+    }
+    const value = answerFor(label, fields);
+    if (value == null) {
+      if (required) unresolved.push(label);
+      continue;
+    }
+    const options: string[] = await el.locator("option").allInnerTexts();
+    const match = options.find((o) => o.trim().toLowerCase() === value.toLowerCase())
+      ?? options.find((o) => o.toLowerCase().includes(value.toLowerCase()));
+    if (!match) {
+      if (required) unresolved.push(`${label} (no option matching "${value}")`);
+      continue;
+    }
+    await el.selectOption({ label: match }).catch(() => {
+      if (required) unresolved.push(label);
+    });
     await humanPause();
   }
 
