@@ -41,7 +41,11 @@ export async function discover() {
   return runDiscovery();
 }
 
-/** Stage 2: score everything currently in `discovered`. */
+/** Stage 2: score everything currently in `discovered`.
+ *
+ * Runs SCORING_CONCURRENCY jobs at once (default 2). With a pooled
+ * LOCAL_LLM_BASE_URL the round-robin then keeps every endpoint busy
+ * simultaneously instead of alternating one call at a time. */
 export async function scoreNewJobs() {
   const profile = loadProfile();
   const variants = loadVariants();
@@ -49,24 +53,30 @@ export async function scoreNewJobs() {
   const pending = jobs.byStatus("discovered");
   const results: { jobId: string; lane?: string; filtered?: string }[] = [];
 
-  for (const job of pending) {
-    try {
-      const outcome = await scoreJob(job, profile, summaries);
-      if (outcome.filtered) {
-        jobs.setStatus(job.id, "prefiltered_out");
-        events.log({ jobId: job.id, kind: "prefiltered", data: { reason: outcome.filtered } });
-        results.push({ jobId: job.id, filtered: outcome.filtered });
-        continue;
+  const concurrency = Math.max(1, Number(process.env.SCORING_CONCURRENCY ?? 2));
+  let next = 0;
+  async function worker() {
+    while (next < pending.length) {
+      const job = pending[next++]!;
+      try {
+        const outcome = await scoreJob(job, profile, summaries);
+        if (outcome.filtered) {
+          jobs.setStatus(job.id, "prefiltered_out");
+          events.log({ jobId: job.id, kind: "prefiltered", data: { reason: outcome.filtered } });
+          results.push({ jobId: job.id, filtered: outcome.filtered });
+          continue;
+        }
+        scores.save(outcome.score!, outcome.lane!);
+        jobs.setStatus(job.id, outcome.lane === "reject" ? "rejected" : "scored");
+        events.log({ jobId: job.id, kind: "scored", data: { overall: outcome.score!.overall, lane: outcome.lane } });
+        results.push({ jobId: job.id, lane: outcome.lane });
+      } catch (err) {
+        jobs.setStatus(job.id, "failed");
+        events.log({ jobId: job.id, kind: "score_error", data: { error: String(err) } });
       }
-      scores.save(outcome.score!, outcome.lane!);
-      jobs.setStatus(job.id, outcome.lane === "reject" ? "rejected" : "scored");
-      events.log({ jobId: job.id, kind: "scored", data: { overall: outcome.score!.overall, lane: outcome.lane } });
-      results.push({ jobId: job.id, lane: outcome.lane });
-    } catch (err) {
-      jobs.setStatus(job.id, "failed");
-      events.log({ jobId: job.id, kind: "score_error", data: { error: String(err) } });
     }
   }
+  await Promise.all(Array.from({ length: Math.min(concurrency, pending.length) }, worker));
   return results;
 }
 

@@ -83,6 +83,11 @@ const FOREIGN_MARKET_TOKENS = [
   "uae", "dubai", "saudi", "israel", "egypt", "nigeria", "kenya", "south africa",
   "pakistan", "bangladesh", "sri lanka",
   "emea", "apac", "latam", "europe",
+  // Unambiguous US city/metro names that often appear without a state code.
+  // (Deliberately omits names shared with Canadian cities, e.g. London.)
+  "new york", "nyc", "san francisco", "bay area", "palo alto", "mountain view",
+  "foster city", "seattle", "boston", "chicago", "austin", "denver", "atlanta",
+  "los angeles", "washington dc", "d.c.",
 ];
 
 /** Words that always count as "somewhere the candidate can work". */
