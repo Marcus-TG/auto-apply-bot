@@ -48,6 +48,8 @@ export async function tailorResume(
   variant: ResumeVariant,
   score: FitScore,
   model: string = config.env.modelGeneration,
+  /** Optional human direction ("prioritize monitoring bullets", "lead with X"). */
+  directive?: string,
 ): Promise<RenderedResume> {
   const poolByCompany = new Map<string, Bullet[]>();
   for (const exp of variant.experiences) poolByCompany.set(exp.company, exp.bulletPool);
@@ -56,7 +58,7 @@ export async function tailorResume(
     model,
     system: SYSTEM,
     userPrompt: `Job: ${job.title} at ${job.company}
-Matched keywords (safe to emphasise): ${score.matchedKeywords.join(", ")}
+${directive ? `Candidate's direction (follow it within the rules): ${directive}\n` : ""}Matched keywords (safe to emphasise): ${score.matchedKeywords.join(", ")}
 Do NOT imply these gaps: ${score.gapKeywords.join(", ")}
 
 Variant "${variant.id}" summary: ${variant.summary}

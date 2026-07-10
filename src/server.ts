@@ -7,12 +7,17 @@
  * Auth is a shared secret header (x-webhook-secret) for the trigger routes; the
  * approval GET links are unguessable UUIDs so they work as one-click email links.
  */
-import { existsSync, appendFileSync, mkdirSync } from "node:fs";
+import { existsSync, appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import express from "express";
 import { config } from "./config/index.js";
 import { initSchema } from "./store/db.js";
 import { jobs, scores, applications, approvals, submissions, events } from "./store/repositories.js";
+import { loadVariants, getVariant } from "./resume/selector.js";
+import { tailorResume } from "./resume/tailor.js";
+import { renderResumePdf, resumeIdentityFromProfile } from "./resume/render.js";
+import { RenderedResume } from "./resume/model.js";
+import { reviseCoverLetter } from "./coverletter/generator.js";
 import {
   discover,
   scoreNewJobs,
@@ -26,6 +31,7 @@ import { resolveApproval, sweepExpiredApprovals } from "./approval/index.js";
 initSchema();
 const app = express();
 app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: false, limit: "1mb" }));
 
 const baseUrl = () => config.env.publicBaseUrl || `http://localhost:${config.env.port}`;
 
@@ -99,6 +105,9 @@ app.get("/review/:jobId", (req, res) => {
   table{border-collapse:collapse;width:100%;font-size:.9rem}
   td{border-top:1px solid #e7e5e4;padding:6px 8px;vertical-align:top}
   pre{white-space:pre-wrap;font-family:Georgia,serif;font-size:.95rem;line-height:1.5}
+  textarea{width:100%;font-family:Georgia,serif;font-size:.95rem;line-height:1.5;border:1px solid #d6d3d1;border-radius:8px;padding:10px;box-sizing:border-box}
+  input[name="instruction"]{width:100%;padding:9px 10px;border:1px solid #d6d3d1;border-radius:8px;margin:8px 0 4px;box-sizing:border-box}
+  form{margin:8px 0}
   iframe{width:100%;height:75vh;border:1px solid #d6d3d1;border-radius:8px;background:#fff}
   .tag{display:inline-block;background:#e7e5e4;border-radius:99px;padding:2px 10px;margin:2px;font-size:.8rem}
 </style></head><body><main>
@@ -112,10 +121,24 @@ app.get("/review/:jobId", (req, res) => {
     <p><b>Strengths:</b> ${score.matchedKeywords.map((k) => `<span class="tag">${esc(k)}</span>`).join("")}</p>
     <p><b>Gaps:</b> ${score.gapKeywords.map((k) => `<span class="tag">${esc(k)}</span>`).join("")}</p>
   </div>
-  <div class="card"><h2>Cover letter</h2><pre>${esc(application.coverLetterText)}</pre></div>
+  <div class="card"><h2>Cover letter</h2>
+    <form method="POST" action="${baseUrl()}/review/${jobId}/letter">
+      <textarea name="text" rows="16">${esc(application.coverLetterText)}</textarea>
+      <button class="btn go" type="submit">💾 Save edits</button>
+    </form>
+    <form method="POST" action="${baseUrl()}/review/${jobId}/letter/revise">
+      <input name="instruction" placeholder="Tell the AI how to improve it, e.g. 'open with the GPU pooling story'" required>
+      <button class="btn go" type="submit">🤖 Revise letter (takes ~30s)</button>
+    </form>
+  </div>
   <div class="card"><h2>Resume (as submitted)</h2>
     <iframe src="${baseUrl()}/artifacts/${jobId}/resume.pdf"></iframe>
     <p class="muted"><a href="${baseUrl()}/artifacts/${jobId}/resume.pdf">open PDF directly</a></p>
+    <form method="POST" action="${baseUrl()}/review/${jobId}/resume/revise">
+      <input name="instruction" placeholder="Direct the tailoring, e.g. 'prioritize monitoring bullets, drop the marketing one'" required>
+      <button class="btn go" type="submit">🤖 Re-tailor resume (takes ~60s)</button>
+    </form>
+    <p class="muted">Re-tailoring re-selects bullets from your approved bank per your direction; it never writes new claims.</p>
   </div>
 </main></body></html>`);
 });
@@ -239,6 +262,77 @@ app.get("/applications", (_req, res) => {
   <h1>Submitted applications (${rows.length})</h1>
   <table><tr><th>Submitted</th><th>Company</th><th>Role</th><th>Fit</th><th>Materials</th><th>Confirmation</th></tr>${table}</table>
 </main></body></html>`);
+});
+
+// --- material editing: manual saves and AI-directed revisions ---
+const backToReview = (res: express.Response, jobId: string) =>
+  res.redirect(`${baseUrl()}/review/${jobId}`);
+
+app.post("/review/:jobId/letter", (req, res) => {
+  const jobId = req.params.jobId;
+  const application = applications.get(jobId);
+  const text = String((req.body as { text?: string }).text ?? "").trim();
+  if (!application || text.length < 100) {
+    res.status(400).send("Letter missing or too short; nothing saved.");
+    return;
+  }
+  writeFileSync(application.coverLetterPath, text);
+  applications.save({ ...application, coverLetterText: text });
+  events.log({ jobId, kind: "letter_edited", data: { by: "human" } });
+  backToReview(res, jobId);
+});
+
+app.post("/review/:jobId/letter/revise", async (req, res) => {
+  const jobId = req.params.jobId;
+  const job = jobs.get(jobId);
+  const application = applications.get(jobId);
+  const instruction = String((req.body as { instruction?: string }).instruction ?? "").trim();
+  if (!job || !application || !instruction) {
+    res.status(400).send("Missing job, application, or instruction.");
+    return;
+  }
+  try {
+    const profile = JSON.parse(readFileSync(resolve(process.cwd(), "config/profile.json"), "utf8"));
+    const rendered = RenderedResume.parse(
+      JSON.parse(readFileSync(application.resumeJsonPath, "utf8")),
+    );
+    const letter = await reviseCoverLetter(
+      job, rendered, application.coverLetterText, instruction, profile.voice.sample,
+    );
+    applications.save({ ...application, coverLetterText: letter.text, coverLetterPath: letter.path });
+    events.log({ jobId, kind: "letter_revised", data: { instruction } });
+    backToReview(res, jobId);
+  } catch (err) {
+    res.status(500).send(`Revision failed: ${esc(String(err).slice(0, 300))}. <a href="${baseUrl()}/review/${jobId}">back</a>`);
+  }
+});
+
+app.post("/review/:jobId/resume/revise", async (req, res) => {
+  const jobId = req.params.jobId;
+  const job = jobs.get(jobId);
+  const application = applications.get(jobId);
+  const score = scores.get(jobId);
+  const instruction = String((req.body as { instruction?: string }).instruction ?? "").trim();
+  if (!job || !application || !score || !instruction) {
+    res.status(400).send("Missing job, application, score, or instruction.");
+    return;
+  }
+  try {
+    const profile = JSON.parse(readFileSync(resolve(process.cwd(), "config/profile.json"), "utf8"));
+    const variants = loadVariants();
+    const variant = getVariant(variants, application.variantId);
+    const rendered = await tailorResume(job, variant, score, undefined, instruction);
+    const { pdfPath, jsonPath } = await renderResumePdf(
+      rendered,
+      resumeIdentityFromProfile(profile.identity),
+      jobId,
+    );
+    applications.save({ ...application, resumePath: pdfPath, resumeJsonPath: jsonPath });
+    events.log({ jobId, kind: "resume_revised", data: { instruction } });
+    backToReview(res, jobId);
+  } catch (err) {
+    res.status(500).send(`Re-tailor failed: ${esc(String(err).slice(0, 300))}. <a href="${baseUrl()}/review/${jobId}">back</a>`);
+  }
 });
 
 // --- approval webhooks (one-click links from the notification) ---

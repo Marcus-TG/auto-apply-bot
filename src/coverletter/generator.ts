@@ -108,3 +108,45 @@ ${job.description.slice(0, 4000)}`,
   writeFileSync(path, final);
   return { text: final, path };
 }
+
+/** Revise an existing letter per a human instruction, keeping every grounding
+ *  rule (no new facts, no em dashes, candidate's voice). Writes the file. */
+export async function reviseCoverLetter(
+  job: JobPosting,
+  resume: RenderedResume,
+  currentText: string,
+  instruction: string,
+  voiceSample: string,
+  model: string = config.env.modelGeneration,
+): Promise<{ text: string; path: string }> {
+  const revised = cleanLetter(scrubDashes(
+    await callText({
+      model,
+      system:
+        SYSTEM +
+        "\nYou are REVISING an existing letter per the candidate's instruction. " +
+        "Apply the instruction faithfully, change nothing else that works, and return only the revised letter.",
+      cachedContext: [
+        {
+          label: "Grounding: the resume content this letter may draw on",
+          text: `Summary: ${resume.summary}\nBullets:\n${resume.experiences
+            .flatMap((e) => e.bullets.map((b) => `- ${b} (${e.company})`))
+            .join("\n")}\nVoice sample: """${voiceSample}"""`,
+        },
+      ],
+      userPrompt: `Candidate's instruction: ${instruction}
+
+Job: ${job.title} at ${job.company}
+
+Current letter:
+${currentText}`,
+      maxTokens: 700,
+    }),
+  ));
+  if (revised.length < 200 || revised.includes("```")) {
+    throw new Error(`revision failed sanity check: ${revised.slice(0, 120)}`);
+  }
+  const path = resolve(process.cwd(), config.env.artifactsDir, job.id, "cover-letter.txt");
+  writeFileSync(path, revised);
+  return { text: revised, path };
+}
