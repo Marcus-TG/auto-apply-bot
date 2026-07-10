@@ -83,8 +83,8 @@ app.get("/review/:jobId", (req, res) => {
   }
   const approval = approvals.pendingForJob(jobId);
   const decide = approval
-    ? `<a class="btn ok" href="${baseUrl()}/approval/${approval.id}/approve">✅ Approve &amp; submit</a>
-       <a class="btn no" href="${baseUrl()}/approval/${approval.id}/reject">❌ Reject</a>
+    ? `<a class="btn ok" href="${baseUrl()}/approval/${approval.id}/approve">Approve &amp; submit</a>
+       <a class="btn no" href="${baseUrl()}/approval/${approval.id}/reject">Reject</a>
        <span class="muted">expires ${esc(approval.expires_at)}</span>`
     : `<span class="muted">No pending approval (status: ${esc(job.status)}).</span>`;
   const dims = score.dimensions
@@ -124,11 +124,11 @@ app.get("/review/:jobId", (req, res) => {
   <div class="card"><h2>Cover letter</h2>
     <form method="POST" action="${baseUrl()}/review/${jobId}/letter">
       <textarea name="text" rows="16">${esc(application.coverLetterText)}</textarea>
-      <button class="btn go" type="submit">💾 Save edits</button>
+      <button class="btn go" type="submit">Save edits</button>
     </form>
     <form method="POST" action="${baseUrl()}/review/${jobId}/letter/revise">
       <input name="instruction" placeholder="Tell the AI how to improve it, e.g. 'open with the GPU pooling story'" required>
-      <button class="btn go" type="submit">🤖 Revise letter (takes ~30s)</button>
+      <button class="btn go" type="submit">Revise letter (takes ~30s)</button>
     </form>
   </div>
   <div class="card"><h2>Resume (as submitted)</h2>
@@ -136,7 +136,7 @@ app.get("/review/:jobId", (req, res) => {
     <p class="muted"><a href="${baseUrl()}/artifacts/${jobId}/resume.pdf">open PDF directly</a></p>
     <form method="POST" action="${baseUrl()}/review/${jobId}/resume/revise">
       <input name="instruction" placeholder="Direct the tailoring, e.g. 'prioritize monitoring bullets, drop the marketing one'" required>
-      <button class="btn go" type="submit">🤖 Re-tailor resume (takes ~60s)</button>
+      <button class="btn go" type="submit">Re-tailor resume (takes ~60s)</button>
     </form>
     <p class="muted">Re-tailoring re-selects bullets from your approved bank per your direction; it never writes new claims.</p>
   </div>
@@ -154,8 +154,8 @@ app.get("/queue", (_req, res) => {
     .map(({ job, score }) => {
       const action =
         job.status === "scored"
-          ? `<a class="btn go" href="${baseUrl()}/tailor-one/${job.id}">✍️ Prepare materials</a>
-             <a class="btn no" href="${baseUrl()}/reject-job/${job.id}">✕ Skip</a>`
+          ? `<a class="btn go" href="${baseUrl()}/tailor-one/${job.id}">Prepare materials</a>
+             <a class="btn no" href="${baseUrl()}/reject-job/${job.id}">Skip</a>`
           : `<a class="btn go" href="${baseUrl()}/review/${job.id}">Review & decide</a>`;
       return `<tr>
         <td><b>${score!.overall}</b></td>
@@ -195,7 +195,7 @@ app.get("/tailor-one/:jobId", (req, res) => {
   }
   void tailorOneJob(jobId, baseUrl());
   res.send(`<meta name="viewport" content="width=device-width, initial-scale=1">
-    <h2>✍️ Preparing materials for ${job.title} @ ${job.company}</h2>
+    <h2>Preparing materials for ${job.title} @ ${job.company}</h2>
     <p>Resume + cover letter take about 2 minutes; a card will land in Discord and the
     <a href="${baseUrl()}/review/${jobId}">review page</a> will fill in.</p>
     <p><a href="${baseUrl()}/queue">← back to queue</a></p>`);
@@ -348,7 +348,7 @@ app.get("/approval/:id/:decision", (req, res) => {
     return;
   }
   res.send(
-    `<h2>${decision === "approve" ? "✅ Approved" : "❌ Rejected"}</h2>` +
+    `<h2>${decision === "approve" ? "Approved" : "Rejected"}</h2>` +
       `<p>Job ${result.jobId} marked <b>${decision}d</b>. ` +
       (decision === "approve" ? "It will be submitted on the next submit run." : "It will not be submitted.") +
       `</p>`,
