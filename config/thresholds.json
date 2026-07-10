@@ -1,5 +1,5 @@
 {
-  "applyFloor": 55,
+  "applyFloor": 65,
   "reviewFloor": 75,
   "autoApplyEnabled": false,
   "minConfidenceForAuto": 0.7,
