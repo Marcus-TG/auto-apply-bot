@@ -230,3 +230,21 @@ export const submissions = {
       .all() as { job_id: string; submitted_at: string; confirmation: string | null }[];
   },
 };
+
+// ---------- followups (post-submission pipeline tracking) ----------
+export type FollowupStatus = "applied" | "no_response" | "screening" | "interview" | "offer" | "rejected";
+export const followups = {
+  set(jobId: string, status: FollowupStatus, note: string | null): void {
+    db()
+      .prepare(
+        `INSERT INTO followups (job_id, status, note, updated_at) VALUES (?,?,?,?)
+         ON CONFLICT(job_id) DO UPDATE SET status=excluded.status, note=excluded.note, updated_at=excluded.updated_at`,
+      )
+      .run(jobId, status, note, now());
+  },
+  get(jobId: string): { status: FollowupStatus; note: string | null; updated_at: string } | undefined {
+    return db().prepare(`SELECT status, note, updated_at FROM followups WHERE job_id=?`).get(jobId) as
+      | { status: FollowupStatus; note: string | null; updated_at: string }
+      | undefined;
+  },
+};

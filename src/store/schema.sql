@@ -75,3 +75,11 @@ CREATE TABLE IF NOT EXISTS submissions (
   submitted_at  TEXT NOT NULL,
   confirmation  TEXT
 );
+
+-- Post-submission pipeline tracking (human-maintained from the Sent tab).
+CREATE TABLE IF NOT EXISTS followups (
+  job_id      TEXT PRIMARY KEY REFERENCES jobs(id),
+  status      TEXT NOT NULL DEFAULT 'applied',  -- applied|no_response|screening|interview|offer|rejected
+  note        TEXT,
+  updated_at  TEXT NOT NULL
+);
