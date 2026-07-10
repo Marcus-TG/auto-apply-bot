@@ -224,4 +224,9 @@ export const submissions = {
   has(jobId: string): boolean {
     return !!db().prepare(`SELECT 1 FROM submissions WHERE job_id=?`).get(jobId);
   },
+  all(): { job_id: string; submitted_at: string; confirmation: string | null }[] {
+    return db()
+      .prepare(`SELECT job_id, submitted_at, confirmation FROM submissions ORDER BY submitted_at DESC`)
+      .all() as { job_id: string; submitted_at: string; confirmation: string | null }[];
+  },
 };

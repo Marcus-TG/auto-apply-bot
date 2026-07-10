@@ -12,7 +12,7 @@ import { resolve } from "node:path";
 import express from "express";
 import { config } from "./config/index.js";
 import { initSchema } from "./store/db.js";
-import { jobs, scores, applications, approvals } from "./store/repositories.js";
+import { jobs, scores, applications, approvals, submissions } from "./store/repositories.js";
 import {
   discover,
   scoreNewJobs,
@@ -116,6 +116,39 @@ app.get("/review/:jobId", (req, res) => {
     <iframe src="${baseUrl()}/artifacts/${jobId}/resume.pdf"></iframe>
     <p class="muted"><a href="${baseUrl()}/artifacts/${jobId}/resume.pdf">open PDF directly</a></p>
   </div>
+</main></body></html>`);
+});
+
+// Applications ledger: every submitted application, newest first.
+app.get("/applications", (_req, res) => {
+  const rows = submissions.all().map((s) => {
+    const job = jobs.get(s.job_id);
+    const score = scores.get(s.job_id);
+    return { ...s, job, score };
+  });
+  const table = rows
+    .map(
+      (r) => `<tr>
+        <td>${esc(r.submitted_at)}</td>
+        <td>${esc(r.job?.company ?? "?")}</td>
+        <td><a href="${esc(r.job?.url ?? "#")}">${esc(r.job?.title?.trim() ?? r.job_id)}</a></td>
+        <td>${r.score?.overall ?? ""}</td>
+        <td><a href="${baseUrl()}/review/${r.job_id}">review</a> · <a href="${baseUrl()}/artifacts/${r.job_id}/resume.pdf">resume</a> · <a href="${baseUrl()}/artifacts/${r.job_id}/cover-letter.txt">letter</a></td>
+        <td>${esc(r.confirmation ?? "")}</td>
+      </tr>`,
+    )
+    .join("");
+  res.send(`<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Applications</title>
+<style>
+  body{font-family:system-ui,sans-serif;margin:0;background:#f5f5f4;color:#1c1917}
+  main{max-width:1000px;margin:0 auto;padding:16px}
+  table{border-collapse:collapse;width:100%;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  th,td{border-top:1px solid #e7e5e4;padding:8px 10px;text-align:left;font-size:.9rem;vertical-align:top}
+  th{background:#fafaf9}
+</style></head><body><main>
+  <h1>Submitted applications (${rows.length})</h1>
+  <table><tr><th>Submitted</th><th>Company</th><th>Role</th><th>Fit</th><th>Materials</th><th>Confirmation</th></tr>${table}</table>
 </main></body></html>`);
 });
 

@@ -124,9 +124,14 @@ async function runFiller(
   }
 }
 
+/** Loose on purpose: "Thanks so much for applying", "application has
+ *  successfully been received", "we've received", etc. all count. */
+export const CONFIRMATION_RE =
+  /thank(s| you)|application (has |was )?(successfully )?(been )?(received|submitted)|we('|’)ve received|successfully (been )?(submitted|applied|received)/;
+
 async function readConfirmation(page: Page): Promise<string | null> {
   const body = (await page.content()).toLowerCase();
-  if (/thank you|application (has been |was )?(received|submitted)|we('|’)ve received|successfully (submitted|applied)/.test(body)) {
+  if (CONFIRMATION_RE.test(body)) {
     return page.url();
   }
   return null;
