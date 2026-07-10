@@ -31,11 +31,17 @@ whose tags/impact best match the job. Return bullet IDs only. You may write a si
 tailored summary line, but it must only reference skills already in the variant.
 Never state or imply experience the candidate does not have.
 Never use em dashes in the summary line; use commas, colons, or separate sentences.
+Never describe the candidate as an "engineer" (a regulated title in their province);
+use "specialist", "builder", "developer", or "administrator" instead.
 The resume must fit ONE page: select at most 12 bullets total, weighted toward the
 most relevant experiences (the renderer trims overflow from the tail, so order matters).`;
 
 /** Em/en dashes read as machine-generated; normalize them out of free text. */
 const scrubDashes = (s: string) => s.replace(/\s*—\s*/g, ", ").replace(/\s+–\s+/g, ", ");
+
+/** "Engineer" is a regulated title in Canadian provinces (e.g. Ontario's
+ *  Professional Engineers Act) — never let the summary self-apply it. */
+const scrubEngineerTitle = (s: string) => s.replace(/\bengineers?\b/gi, "specialist");
 
 export async function tailorResume(
   job: JobPosting,
@@ -98,7 +104,7 @@ ${job.description.slice(0, 5000)}`,
 
   return {
     variantId: variant.id,
-    summary: scrubDashes(plan.summary || variant.summary),
+    summary: scrubEngineerTitle(scrubDashes(plan.summary || variant.summary)),
     skills: variant.skills,
     experiences,
     education: variant.education,
