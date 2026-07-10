@@ -12,11 +12,12 @@ import { resolve } from "node:path";
 import express from "express";
 import { config } from "./config/index.js";
 import { initSchema } from "./store/db.js";
-import { jobs, scores, applications, approvals, submissions } from "./store/repositories.js";
+import { jobs, scores, applications, approvals, submissions, events } from "./store/repositories.js";
 import {
   discover,
   scoreNewJobs,
   tailorScoredJobs,
+  tailorOneJob,
   submitApproved,
   runPipeline,
 } from "./orchestrator/pipeline.js";
@@ -117,6 +118,77 @@ app.get("/review/:jobId", (req, res) => {
     <p class="muted"><a href="${baseUrl()}/artifacts/${jobId}/resume.pdf">open PDF directly</a></p>
   </div>
 </main></body></html>`);
+});
+
+// The review queue: everything that cleared the score floor, waiting for a
+// human skim. Materials are prepared per-job on demand (button), not in bulk.
+app.get("/queue", (_req, res) => {
+  const rows = [...jobs.byStatus("scored"), ...jobs.byStatus("awaiting_approval"), ...jobs.byStatus("approved")]
+    .map((j) => ({ job: j, score: scores.get(j.id) }))
+    .filter((r) => r.score)
+    .sort((a, b) => (b.score!.overall ?? 0) - (a.score!.overall ?? 0));
+  const table = rows
+    .map(({ job, score }) => {
+      const action =
+        job.status === "scored"
+          ? `<a class="btn go" href="${baseUrl()}/tailor-one/${job.id}">✍️ Prepare materials</a>
+             <a class="btn no" href="${baseUrl()}/reject-job/${job.id}">✕ Skip</a>`
+          : `<a class="btn go" href="${baseUrl()}/review/${job.id}">Review & decide</a>`;
+      return `<tr>
+        <td><b>${score!.overall}</b></td>
+        <td>${esc(job.company)}</td>
+        <td><a href="${esc(job.url)}">${esc(job.title.trim())}</a></td>
+        <td>${esc(job.location ?? "")}</td>
+        <td>${esc(job.status)}</td>
+        <td>${action}</td>
+      </tr>`;
+    })
+    .join("");
+  res.send(`<!doctype html><html><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Review queue</title>
+<style>
+  body{font-family:system-ui,sans-serif;margin:0;background:#f5f5f4;color:#1c1917}
+  main{max-width:1100px;margin:0 auto;padding:16px}
+  table{border-collapse:collapse;width:100%;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  th,td{border-top:1px solid #e7e5e4;padding:8px 10px;text-align:left;font-size:.9rem;vertical-align:top}
+  th{background:#fafaf9}
+  .btn{display:inline-block;padding:5px 10px;border-radius:6px;text-decoration:none;font-weight:600;font-size:.8rem;margin:1px}
+  .go{background:#2563eb;color:#fff} .no{background:#e7e5e4;color:#44403c}
+</style></head><body><main>
+  <h1>Review queue (${rows.length})</h1>
+  <p><a href="${baseUrl()}/applications">→ submitted applications ledger</a></p>
+  <table><tr><th>Fit</th><th>Company</th><th>Role</th><th>Location</th><th>Status</th><th></th></tr>${table}</table>
+</main></body></html>`);
+});
+
+// Prepare materials for one job (async — tailoring takes ~2 min). The status
+// guard inside tailorOneJob makes double-clicks harmless.
+app.get("/tailor-one/:jobId", (req, res) => {
+  const jobId = req.params.jobId;
+  const job = jobs.get(jobId);
+  if (!job || job.status !== "scored") {
+    res.status(409).send(`Not tailorable (status: ${job?.status ?? "unknown"}). <a href="${baseUrl()}/queue">back</a>`);
+    return;
+  }
+  void tailorOneJob(jobId, baseUrl());
+  res.send(`<meta name="viewport" content="width=device-width, initial-scale=1">
+    <h2>✍️ Preparing materials for ${job.title} @ ${job.company}</h2>
+    <p>Resume + cover letter take about 2 minutes; a card will land in Discord and the
+    <a href="${baseUrl()}/review/${jobId}">review page</a> will fill in.</p>
+    <p><a href="${baseUrl()}/queue">← back to queue</a></p>`);
+});
+
+// Skip a job from the queue without preparing anything.
+app.get("/reject-job/:jobId", (req, res) => {
+  const jobId = req.params.jobId;
+  const job = jobs.get(jobId);
+  if (!job || job.status !== "scored") {
+    res.status(409).send(`Not skippable (status: ${job?.status ?? "unknown"}). <a href="${baseUrl()}/queue">back</a>`);
+    return;
+  }
+  jobs.setStatus(jobId, "rejected");
+  events.log({ jobId, kind: "skipped_from_queue", data: {} });
+  res.redirect(`${baseUrl()}/queue`);
 });
 
 // Verification-code inbox (the n8n "code courier" POSTs Greenhouse security

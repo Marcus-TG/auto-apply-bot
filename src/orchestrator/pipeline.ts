@@ -80,53 +80,65 @@ export async function scoreNewJobs() {
   return results;
 }
 
-/** Stage 3: tailor materials for scored jobs that are in an apply/review lane. */
-export async function tailorScoredJobs(baseUrl: string) {
+/** Tailor ONE scored job: materials + approval card. Status-guarded so
+ *  concurrent calls (double clicks, overlapping runs) can't double-process. */
+export async function tailorOneJob(
+  jobId: string,
+  baseUrl: string,
+): Promise<{ jobId: string; lane?: string; error?: string }> {
+  const job = jobs.get(jobId);
+  if (!job || job.status !== "scored") {
+    return { jobId, error: `not tailorable (status: ${job?.status ?? "missing"})` };
+  }
+  const score = scores.get(jobId);
+  if (!score) return { jobId, error: "no score" };
   const profile = loadProfile();
   const variants = loadVariants();
-  const scored = jobs.byStatus("scored");
-  const out: { jobId: string; lane: string }[] = [];
+  try {
+    jobs.setStatus(jobId, "tailoring");
+    const variant = getVariant(variants, score.recommendedVariant);
+    const rendered = await tailorResume(job, variant, score);
+    const { pdfPath, jsonPath } = await renderResumePdf(
+      rendered,
+      resumeIdentityFromProfile(profile.identity),
+      jobId,
+    );
+    const letter = await generateCoverLetter(job, rendered, score, profile.identity, profile.voice.sample);
 
-  for (const job of scored) {
-    const score = scores.get(job.id);
-    if (!score) continue;
-    try {
-      jobs.setStatus(job.id, "tailoring");
-      const variant = getVariant(variants, score.recommendedVariant);
-      const rendered = await tailorResume(job, variant, score);
-      const { pdfPath, jsonPath } = await renderResumePdf(
-        rendered,
-        resumeIdentityFromProfile(profile.identity),
-        job.id,
-      );
-      const letter = await generateCoverLetter(job, rendered, score, profile.identity, profile.voice.sample);
+    const app: TailoredApplication = {
+      jobId,
+      variantId: variant.id,
+      resumePath: pdfPath,
+      resumeJsonPath: jsonPath,
+      coverLetterPath: letter.path,
+      coverLetterText: letter.text,
+      createdAt: new Date().toISOString(),
+    };
+    applications.save(app);
+    events.log({ jobId, kind: "tailored", data: { variant: variant.id } });
 
-      const app: TailoredApplication = {
-        jobId: job.id,
-        variantId: variant.id,
-        resumePath: pdfPath,
-        resumeJsonPath: jsonPath,
-        coverLetterPath: letter.path,
-        coverLetterText: letter.text,
-        createdAt: new Date().toISOString(),
-      };
-      applications.save(app);
-      events.log({ jobId: job.id, kind: "tailored", data: { variant: variant.id } });
-
-      if (score.lane === "auto") {
-        // Mid-band + auto-apply enabled: skip the human gate, go straight to approved.
-        jobs.setStatus(job.id, "approved");
-        out.push({ jobId: job.id, lane: "auto" });
-      } else {
-        // review lane: create the approval request and notify.
-        const card = requestApproval(job, baseUrl);
-        await notifyN8n(card);
-        out.push({ jobId: job.id, lane: "review" });
-      }
-    } catch (err) {
-      jobs.setStatus(job.id, "failed");
-      events.log({ jobId: job.id, kind: "tailor_error", data: { error: String(err) } });
+    if (score.lane === "auto") {
+      // Mid-band + auto-apply enabled: skip the human gate, go straight to approved.
+      jobs.setStatus(jobId, "approved");
+      return { jobId, lane: "auto" };
     }
+    // review lane: create the approval request and notify.
+    const card = requestApproval(job, baseUrl);
+    await notifyN8n(card);
+    return { jobId, lane: "review" };
+  } catch (err) {
+    jobs.setStatus(jobId, "failed");
+    events.log({ jobId, kind: "tailor_error", data: { error: String(err) } });
+    return { jobId, error: String(err) };
+  }
+}
+
+/** Stage 3: tailor materials for scored jobs that are in an apply/review lane. */
+export async function tailorScoredJobs(baseUrl: string) {
+  const out: { jobId: string; lane: string }[] = [];
+  for (const job of jobs.byStatus("scored")) {
+    const res = await tailorOneJob(job.id, baseUrl);
+    if (res.lane) out.push({ jobId: res.jobId, lane: res.lane });
   }
   return out;
 }
