@@ -7,7 +7,7 @@
  * Auth is a shared secret header (x-webhook-secret) for the trigger routes; the
  * approval GET links are unguessable UUIDs so they work as one-click email links.
  */
-import { existsSync } from "node:fs";
+import { existsSync, appendFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import express from "express";
 import { config } from "./config/index.js";
@@ -117,6 +117,23 @@ app.get("/review/:jobId", (req, res) => {
     <p class="muted"><a href="${baseUrl()}/artifacts/${jobId}/resume.pdf">open PDF directly</a></p>
   </div>
 </main></body></html>`);
+});
+
+// Verification-code inbox (the n8n "code courier" POSTs Greenhouse security
+// codes here as they arrive by email). Waiting submit runs poll the file.
+app.post("/verify-code", requireSecret, (req, res) => {
+  const { code, subject } = req.body as { code?: string; subject?: string };
+  if (!code || !/^[A-Za-z0-9]{6,12}$/.test(code)) {
+    res.status(400).json({ error: "code must be 6-12 alphanumerics" });
+    return;
+  }
+  const dir = resolve(process.cwd(), "data");
+  mkdirSync(dir, { recursive: true });
+  appendFileSync(
+    resolve(dir, "verify-codes.jsonl"),
+    JSON.stringify({ code, subject: subject ?? null, at: new Date().toISOString() }) + "\n",
+  );
+  res.json({ ok: true });
 });
 
 // Applications ledger: every submitted application, newest first.

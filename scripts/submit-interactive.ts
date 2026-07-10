@@ -42,6 +42,26 @@ const log = (msg: string) => {
 };
 const readCode = () => (existsSync(CODE_FILE) ? readFileSync(CODE_FILE, "utf8").trim() : "");
 
+/** Newest code the n8n courier delivered after `sinceMs`, preferring emails
+ *  whose subject names this job's company. Falls back to "" when none. */
+function courierCode(sinceMs: number, company: string): string {
+  const file = resolve(process.cwd(), "data", "verify-codes.jsonl");
+  if (!existsSync(file)) return "";
+  const entries = readFileSync(file, "utf8")
+    .trim()
+    .split("\n")
+    .flatMap((line) => {
+      try {
+        return [JSON.parse(line) as { code: string; subject: string | null; at: string }];
+      } catch {
+        return [];
+      }
+    })
+    .filter((e) => Date.parse(e.at) > sinceMs)
+    .filter((e) => !e.subject || e.subject.toLowerCase().includes(company.toLowerCase()));
+  return entries.at(-1)?.code ?? "";
+}
+
 async function main() {
   const job = jobs.get(ID);
   const app = applications.get(ID);
@@ -85,10 +105,12 @@ async function main() {
       return;
     }
 
+    const clickedAt = Date.now();
     await page.locator(ats === "lever" ? LEVER_SUBMIT : GREENHOUSE_SUBMIT).last().click();
     await page.waitForTimeout(4000);
 
-    // Success, or a Greenhouse security-code gate — poll for the emailed code.
+    // Success, or a Greenhouse security-code gate — poll for the emailed code
+    // (manual drop file first, then whatever the n8n courier delivered).
     let lastTried = "";
     const deadline = Date.now() + 20 * 60_000;
     while (Date.now() < deadline) {
@@ -105,7 +127,7 @@ async function main() {
         await page.screenshot({ path: resolve(ART, "postsubmit.png") });
         log("no confirmation and no code gate — inspect postsubmit.png");
       }
-      const code = readCode();
+      const code = readCode() || courierCode(clickedAt, job.company);
       if (code && code !== lastTried) {
         lastTried = code;
         log(`entering code ${code}`);
