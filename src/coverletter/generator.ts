@@ -83,7 +83,7 @@ export async function generateCoverLetter(
 Candidate: ${identity.fullName}
 Resume summary: ${resume.summary}
 Key resume points:
-${resume.experiences.flatMap((e) => e.bullets.map((b) => `- ${b} (${e.company})`)).join("\n")}
+${resume.experiences.flatMap((e) => e.bullets.map((b) => `- ${b}${e.company ? ` (${e.company})` : ""}`)).join("\n")}
 Genuine strengths for this role: ${score.matchedKeywords.join(", ")}`;
 
   const draft = await callText({
@@ -147,7 +147,7 @@ export async function reviseCoverLetter(
         {
           label: "Grounding: the resume content this letter may draw on",
           text: `Summary: ${resume.summary}\nBullets:\n${resume.experiences
-            .flatMap((e) => e.bullets.map((b) => `- ${b} (${e.company})`))
+            .flatMap((e) => e.bullets.map((b) => `- ${b}${e.company ? ` (${e.company})` : ""}`))
             .join("\n")}\nVoice sample: """${voiceSample}"""`,
         },
       ],

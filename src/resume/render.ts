@@ -75,7 +75,7 @@ export function resumeToHtml(r: RenderedResume, identity: ResumeIdentity): strin
     .map(
       (e) => `
     <section class="exp">
-      <div class="row"><strong>${esc(e.title)}</strong><span>${esc(e.company)}${e.location ? " · " + esc(e.location) : ""}</span></div>
+      <div class="row"><strong>${esc(e.title)}</strong><span>${[e.company, e.location].filter(Boolean).map((s) => esc(s!)).join(" · ")}</span></div>
       <div class="dates">${esc(dateYear(e.start))}${e.end && dateYear(e.end) === dateYear(e.start) ? "" : ` – ${e.end ? esc(dateYear(e.end)) : "Present"}`}</div>
       <ul>${e.bullets.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>
     </section>`,

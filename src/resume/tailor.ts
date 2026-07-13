@@ -51,8 +51,11 @@ export async function tailorResume(
   /** Optional human direction ("prioritize monitoring bullets", "lead with X"). */
   directive?: string,
 ): Promise<RenderedResume> {
+  // Freelance entries may have an empty display company; key on title instead so
+  // the model's plan can still reference them.
+  const keyOf = (e: { company: string; title: string }) => e.company || e.title;
   const poolByCompany = new Map<string, Bullet[]>();
-  for (const exp of variant.experiences) poolByCompany.set(exp.company, exp.bulletPool);
+  for (const exp of variant.experiences) poolByCompany.set(keyOf(exp), exp.bulletPool);
 
   const plan = await callStructured({
     model,
@@ -66,7 +69,7 @@ Approved bullets per experience:
 ${variant.experiences
   .map(
     (e) =>
-      `- ${e.company} (${e.title}):\n` +
+      `- ${keyOf(e)} (${e.title}):\n` +
       e.bulletPool.map((b) => `    [${b.id}] (tags: ${b.tags.join(", ")}) ${b.text}`).join("\n"),
   )
   .join("\n")}
@@ -83,8 +86,8 @@ ${job.description.slice(0, 5000)}`,
 
   // Resolve ids → exact approved text. Silently drop any id the model invented.
   const experiences = variant.experiences.map((exp) => {
-    const chosen = plan.experiences.find((p) => p.company === exp.company);
-    const pool = poolByCompany.get(exp.company) ?? [];
+    const chosen = plan.experiences.find((p) => p.company === keyOf(exp));
+    const pool = poolByCompany.get(keyOf(exp)) ?? [];
     const byId = new Map(pool.map((b) => [b.id, b.text]));
     const bullets = (chosen?.bulletIds ?? [])
       .map((id) => byId.get(id))
