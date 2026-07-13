@@ -28,7 +28,9 @@ Rules:
 - Match the candidate's voice sample. No buzzwords, no "I am passionate about", no
   generic filler. Prefer concrete outcomes over adjectives.
 - Never use em dashes or en dashes; use commas, colons, or separate sentences.
-- 3 short paragraphs, ~200-250 words. No "Dear Hiring Manager" cliché opener unless natural.`;
+- 3 short paragraphs, ~200-250 words. Open on a specific hook, not "Dear..." or
+  "I am writing to...". Body only: no greeting line and no sign-off; the letter
+  frame is added programmatically afterward.`;
 
 /** Em/en dashes read as machine-generated; normalize them out of free text. */
 const scrubDashes = (s: string) => s.replace(/\s*—\s*/g, ", ").replace(/\s+–\s+/g, ", ");
@@ -52,6 +54,19 @@ function cleanLetter(s: string): string {
   }
   while (lines.length && ["", "---"].includes(lines[lines.length - 1]!.trim())) lines.pop();
   return lines.join("\n").trim();
+}
+
+/** The model writes body-only prose; the letter frame (greeting + sign-off) is
+ *  added here so it can never come out malformed. Idempotent: skips either part
+ *  if the text already has it, so re-framing an existing letter is safe. */
+export function frameLetter(body: string, company: string, fullName: string): string {
+  let text = body.trim();
+  if (!/^(hi|hello|dear)\b/i.test(text)) text = `Hi ${company} team,\n\n${text}`;
+  const firstName = fullName.split(" ")[0]!;
+  if (!text.endsWith(fullName) && !text.endsWith(firstName)) {
+    text = `${text}\n\nBest,\n${fullName}`;
+  }
+  return text;
 }
 
 export async function generateCoverLetter(
@@ -102,11 +117,12 @@ ${job.description.slice(0, 4000)}`,
     throw new Error(`cover letter failed sanity check: ${final.slice(0, 120)}`);
   }
 
+  const framed = frameLetter(final, job.company, identity.fullName);
   const dir = resolve(process.cwd(), config.env.artifactsDir, job.id);
   mkdirSync(dir, { recursive: true });
   const path = resolve(dir, "cover-letter.txt");
-  writeFileSync(path, final);
-  return { text: final, path };
+  writeFileSync(path, framed);
+  return { text: framed, path };
 }
 
 /** Revise an existing letter per a human instruction, keeping every grounding
@@ -117,6 +133,7 @@ export async function reviseCoverLetter(
   currentText: string,
   instruction: string,
   voiceSample: string,
+  fullName: string,
   model: string = config.env.modelGeneration,
 ): Promise<{ text: string; path: string }> {
   const revised = cleanLetter(scrubDashes(
@@ -146,7 +163,8 @@ ${currentText}`,
   if (revised.length < 200 || revised.includes("```")) {
     throw new Error(`revision failed sanity check: ${revised.slice(0, 120)}`);
   }
+  const framed = frameLetter(revised, job.company, fullName);
   const path = resolve(process.cwd(), config.env.artifactsDir, job.id, "cover-letter.txt");
-  writeFileSync(path, revised);
-  return { text: revised, path };
+  writeFileSync(path, framed);
+  return { text: framed, path };
 }

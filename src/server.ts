@@ -405,6 +405,7 @@ app.post("/review/:jobId/letter/revise", async (req, res) => {
     );
     const letter = await reviseCoverLetter(
       job, rendered, application.coverLetterText, instruction, profile.voice.sample,
+      profile.identity.fullName,
     );
     applications.save({ ...application, coverLetterText: letter.text, coverLetterPath: letter.path });
     events.log({ jobId, kind: "letter_revised", data: { instruction } });
