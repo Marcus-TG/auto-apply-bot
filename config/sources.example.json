@@ -16,7 +16,8 @@
       "kind": "ashby",
       "enabled": true,
       "companies": ["ramp", "linear"],
-      "notes": "Org name = jobs.ashbyhq.com/<org>. Public JSON API."
+      "displayNames": { "linear": "Linear", "ramp": "Ramp" },
+      "notes": "Org name = jobs.ashbyhq.com/<org>. Public JSON API. displayNames maps slug -> brand for letters/board."
     },
     {
       "kind": "workday",

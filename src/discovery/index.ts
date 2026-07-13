@@ -26,6 +26,9 @@ export interface SourceEntryConfig {
   enabled: boolean;
   companies: string[];
   queries: string[];
+  /** Brand names for boards whose token/slug isn't the display name
+   *  (e.g. ashby "posthog" → "PostHog"). Used on letters and the board. */
+  displayNames?: Record<string, string>;
   notes?: string;
 }
 

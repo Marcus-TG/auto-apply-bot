@@ -54,6 +54,8 @@ const SourceEntry = z.object({
   companies: z.array(z.string()).default([]),
   /** Free-text search queries for aggregators. */
   queries: z.array(z.string()).default([]),
+  /** Brand names for boards whose token/slug isn't the display name. */
+  displayNames: z.record(z.string()).optional(),
   notes: z.string().optional(),
 });
 const SourcesSchema = z.object({ sources: z.array(SourceEntry) });

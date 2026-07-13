@@ -45,9 +45,10 @@ export const ashbyAdapter: SourceAdapter = {
       );
       if (!res.ok) continue;
       const data = (await res.json()) as { jobs: AshbyJob[] };
+      const company = cfg.displayNames?.[org] ?? org;
       for (const j of data.jobs ?? []) {
         const description = j.descriptionPlain ?? "";
-        const base = { source: "ashby" as const, company: org, title: j.title, location: j.location ?? null };
+        const base = { source: "ashby" as const, company, title: j.title, location: j.location ?? null };
         out.push({
           id: makeJobId(base),
           ...base,
