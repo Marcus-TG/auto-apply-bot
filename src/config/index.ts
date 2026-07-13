@@ -90,6 +90,11 @@ const env = {
   // activity. Raise toward 259200 (72h) if you want long human-in-the-loop pauses.
   kernelTimeoutSeconds: Number(process.env.KERNEL_TIMEOUT_SECONDS ?? 300),
   dryRun: bool(process.env.DRY_RUN, true),
+  // Adzuna official API — free key from https://developer.adzuna.com.
+  // The adzuna source stays blocked until both are set.
+  adzunaAppId: process.env.ADZUNA_APP_ID ?? "",
+  adzunaAppKey: process.env.ADZUNA_APP_KEY ?? "",
+  adzunaCountry: process.env.ADZUNA_COUNTRY ?? "ca",
   enableLinkedin: bool(process.env.ENABLE_LINKEDIN, false),
   enableIndeed: bool(process.env.ENABLE_INDEED, false),
   maxSubmissionsPerDay: Number(process.env.MAX_SUBMISSIONS_PER_DAY ?? 15),
@@ -114,5 +119,6 @@ export type AppConfig = typeof config;
 export function sourceAllowed(kind: string): boolean {
   if (kind === "linkedin") return config.env.enableLinkedin;
   if (kind === "indeed") return config.env.enableIndeed;
+  if (kind === "adzuna") return Boolean(config.env.adzunaAppId && config.env.adzunaAppKey);
   return true;
 }

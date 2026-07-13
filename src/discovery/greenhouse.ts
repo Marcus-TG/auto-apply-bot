@@ -8,6 +8,7 @@ import type { SourceEntryConfig } from "./index.js";
 import type { JobPosting } from "../types/index.js";
 import { classifyRemote } from "../normalize/dedupe.js";
 import { makeJobId } from "../normalize/dedupe.js";
+import { stripHtml } from "./util.js";
 
 interface GhJob {
   id: number;
@@ -17,18 +18,6 @@ interface GhJob {
   location?: { name?: string };
   content?: string; // HTML-encoded when content=true
   company_name?: string;
-}
-
-function stripHtml(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&#\d+;/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 export const greenhouseAdapter: SourceAdapter = {

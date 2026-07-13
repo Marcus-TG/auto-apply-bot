@@ -25,6 +25,36 @@
       "notes": "Public boards expose a JSON endpoint per tenant; needs a host + tenant per company."
     },
     {
+      "kind": "smartrecruiters",
+      "enabled": true,
+      "companies": ["Visa"],
+      "notes": "Company id = slug in jobs.smartrecruiters.com/<id>/... Public JSON API."
+    },
+    {
+      "kind": "workable",
+      "enabled": true,
+      "companies": [],
+      "notes": "Account = slug in apply.workable.com/<account>/. Public widget JSON API."
+    },
+    {
+      "kind": "remotive",
+      "enabled": true,
+      "queries": ["marketing"],
+      "notes": "Remote aggregator, public API. Keep queries few: they advise max ~4 requests/day. Link back to Remotive when sharing."
+    },
+    {
+      "kind": "weworkremotely",
+      "enabled": true,
+      "queries": ["remote-programming-jobs"],
+      "notes": "Queries are WWR category slugs from weworkremotely.com/categories/<slug>. Public RSS."
+    },
+    {
+      "kind": "adzuna",
+      "enabled": true,
+      "queries": ["marketing manager @ toronto"],
+      "notes": "Official API; blocked until ADZUNA_APP_ID/ADZUNA_APP_KEY are set (free key at developer.adzuna.com). Query syntax: 'what @ where'."
+    },
+    {
       "kind": "linkedin",
       "enabled": false,
       "queries": ["senior marketing manager remote canada"],

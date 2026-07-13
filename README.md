@@ -10,7 +10,9 @@ discover → dedupe → prefilter → LLM fit-score → tailor → gate (auto|hu
 
 ## What it does
 
-- **Discovers** jobs from ATS-direct JSON APIs (Greenhouse, Lever, Ashby, Workday).
+- **Discovers** jobs from ATS-direct JSON APIs (Greenhouse, Lever, Ashby, Workday,
+  SmartRecruiters, Workable) and API-sanctioned aggregators (Remotive,
+  We Work Remotely, Adzuna).
   LinkedIn/Indeed adapters exist but ship as ToS-gated stubs — see
   [docs/TOS-AND-SAFETY.md](docs/TOS-AND-SAFETY.md).
 - **Scores fit** in two stages: a free deterministic prefilter, then a Claude rubric

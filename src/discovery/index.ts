@@ -13,6 +13,11 @@ import { greenhouseAdapter } from "./greenhouse.js";
 import { leverAdapter } from "./lever.js";
 import { ashbyAdapter } from "./ashby.js";
 import { workdayAdapter } from "./workday.js";
+import { smartrecruitersAdapter } from "./smartrecruiters.js";
+import { workableAdapter } from "./workable.js";
+import { remotiveAdapter } from "./remotive.js";
+import { weworkremotelyAdapter } from "./weworkremotely.js";
+import { adzunaAdapter } from "./adzuna.js";
 import { linkedinAdapter } from "./linkedin.js";
 import { indeedAdapter } from "./indeed.js";
 
@@ -29,6 +34,11 @@ const REGISTRY: Record<string, SourceAdapter> = {
   lever: leverAdapter,
   ashby: ashbyAdapter,
   workday: workdayAdapter,
+  smartrecruiters: smartrecruitersAdapter,
+  workable: workableAdapter,
+  remotive: remotiveAdapter,
+  weworkremotely: weworkremotelyAdapter,
+  adzuna: adzunaAdapter,
   linkedin: linkedinAdapter,
   indeed: indeedAdapter,
 };

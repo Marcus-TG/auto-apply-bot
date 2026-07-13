@@ -16,6 +16,11 @@ export const SourceKind = z.enum([
   "lever",
   "ashby",
   "workday",
+  "smartrecruiters",
+  "workable",
+  "remotive", // aggregator, public API (link back to their URL; poll sparingly)
+  "weworkremotely", // aggregator, public RSS
+  "adzuna", // aggregator, official API — gated behind ADZUNA_APP_ID/KEY
   "linkedin", // ToS-restricted — gated behind ENABLE_LINKEDIN
   "indeed", // ToS-restricted — gated behind ENABLE_INDEED
   "manual",

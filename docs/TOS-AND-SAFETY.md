@@ -5,9 +5,15 @@ Automating job applications is legitimate — it's your own job search — but *
 
 ## Source posture
 
-- **ATS-direct sources (Greenhouse, Lever, Ashby, Workday)** expose public JSON APIs
-  meant to be read programmatically. Using them for discovery is fine. This is the
-  default and where the value is.
+- **ATS-direct sources (Greenhouse, Lever, Ashby, Workday, SmartRecruiters,
+  Workable)** expose public JSON APIs meant to be read programmatically. Using them
+  for discovery is fine. This is the default and where the value is.
+- **API-sanctioned aggregators (Remotive, We Work Remotely, Adzuna)** publish their
+  listings for programmatic reads — Remotive and WWR openly (JSON API / RSS), Adzuna
+  behind a free official API key (`ADZUNA_APP_ID`/`ADZUNA_APP_KEY`; the source is
+  blocked until both are set). House rules still apply: Remotive asks for a link
+  back, credit as the source, and no more than a few requests per day — so keep its
+  query list short and discovery runs infrequent.
 - **LinkedIn and Indeed** explicitly **prohibit scraping and automated access** in
   their terms. Automating them risks account restriction/permanent ban and is legally
   gray. Their adapters ship as **deliberate stubs that throw**, gated behind *two*
