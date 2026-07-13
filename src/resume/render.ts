@@ -17,13 +17,16 @@ function esc(s: string): string {
 }
 
 /** The parts of profile.identity the resume header renders. Everything except
- *  fullName is optional so partial profiles still render. */
+ *  fullName is optional so partial profiles still render. `resumeContact` is
+ *  accepted here too so a raw profile.identity is safe to pass: the header
+ *  filter is applied inside resumeToHtml, not just by the caller. */
 export interface ResumeIdentity {
   fullName: string;
   email?: string;
   phone?: string;
   location?: string;
   links?: Record<string, string | null>;
+  resumeContact?: { includePhone?: boolean; links?: string[] };
 }
 
 /** "https://marcusstrauss.dev/" → "marcusstrauss.dev" for display. */
@@ -38,14 +41,7 @@ const dateYear = (s: string) => s.slice(0, 4);
  * whitelists which identity.links keys appear on the resume. Everything stays in
  * the profile for form-filling; this only controls what the PDF shows.
  */
-export function resumeIdentityFromProfile(identity: {
-  fullName: string;
-  email?: string;
-  phone?: string;
-  location?: string;
-  links?: Record<string, string | null>;
-  resumeContact?: { includePhone?: boolean; links?: string[] };
-}): ResumeIdentity {
+export function resumeIdentityFromProfile(identity: ResumeIdentity): ResumeIdentity {
   const rc = identity.resumeContact ?? {};
   const links: Record<string, string | null> = { ...(identity.links ?? {}) };
   if (Array.isArray(rc.links)) {
@@ -62,7 +58,11 @@ export function resumeIdentityFromProfile(identity: {
   };
 }
 
-export function resumeToHtml(r: RenderedResume, identity: ResumeIdentity): string {
+export function resumeToHtml(r: RenderedResume, rawIdentity: ResumeIdentity): string {
+  // Always apply the resumeContact filter here, even if the caller already did
+  // (it's idempotent) — passing an unfiltered profile.identity must not leak
+  // phone/links onto the PDF.
+  const identity = resumeIdentityFromProfile(rawIdentity);
   const contactParts = [
     identity.email && `<a href="mailto:${esc(identity.email)}">${esc(identity.email)}</a>`,
     identity.phone && esc(identity.phone),
