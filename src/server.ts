@@ -152,6 +152,24 @@ const FOLLOWUP_STATUSES = ["applied", "no_response", "screening", "interview", "
 app.get("/queue", (req, res) => {
   const tab = String(req.query.tab ?? "queue");
 
+  // Pipeline progress: how much of what discovery pulled in has been through
+  // the prefilter/scorer, and what's still waiting for the next cron pass.
+  const sc = jobs.statusCounts();
+  const inQueue = sc.discovered ?? 0;
+  const filteredOut = sc.prefiltered_out ?? 0;
+  const rejected = sc.rejected ?? 0;
+  const total = Object.values(sc).reduce((a, b) => a + b, 0);
+  const processed = total - inQueue;
+  const passed = processed - filteredOut - rejected;
+  const pct = total ? Math.round((processed / total) * 100) : 100;
+  const progressStrip = `<div class="progress">
+    <div class="bar"><div class="fill" style="width:${pct}%"></div></div>
+    <span><b>${processed.toLocaleString()}</b> of <b>${total.toLocaleString()}</b> scored (${pct}%)${
+      inQueue ? ` — <b>${inQueue.toLocaleString()}</b> in queue for the next pass` : ""
+    }</span>
+    <span class="muted">${filteredOut.toLocaleString()} filtered out · ${rejected.toLocaleString()} below floor · ${passed.toLocaleString()} passed</span>
+  </div>`;
+
   const tabsNav = (counts: Record<string, number>) =>
     ["queue", "approved", "sent"]
       .map(
@@ -251,8 +269,12 @@ app.get("/queue", (req, res) => {
   form.inline{display:flex;gap:6px;align-items:center}
   form.inline input{flex:1;padding:5px 8px;border:1px solid #d6d3d1;border-radius:6px;min-width:120px}
   form.inline select{padding:5px;border:1px solid #d6d3d1;border-radius:6px}
+  .progress{background:#fff;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.08);padding:10px 12px;margin:0 0 14px;font-size:.85rem;display:flex;flex-wrap:wrap;gap:4px 16px;align-items:center}
+  .progress .bar{flex-basis:100%;height:8px;background:#e7e5e4;border-radius:4px;overflow:hidden}
+  .progress .fill{height:100%;background:#2563eb;border-radius:4px}
 </style></head><body><main>
   <h1>Applications board</h1>
+  ${progressStrip}
   <div>${tabsNav(counts)}</div>
   ${body}
 </main></body></html>`);

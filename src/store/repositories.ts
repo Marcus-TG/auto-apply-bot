@@ -60,6 +60,15 @@ export const jobs = {
   exists(id: string): boolean {
     return !!db().prepare(`SELECT 1 FROM jobs WHERE id=?`).get(id);
   },
+
+  /** Job count per status — the pipeline-progress numbers for the board. */
+  statusCounts(): Record<string, number> {
+    const rows = db().prepare(`SELECT status, COUNT(*) AS n FROM jobs GROUP BY status`).all() as {
+      status: string;
+      n: number;
+    }[];
+    return Object.fromEntries(rows.map((r) => [r.status, r.n]));
+  },
 };
 
 function rowToJob(r: Record<string, unknown>): JobPosting & { status: JobStatus } {
