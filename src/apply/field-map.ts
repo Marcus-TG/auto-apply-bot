@@ -18,6 +18,9 @@ export interface ApplicantFields {
   github?: string;
   // Common free-text questions we have canned answers for:
   answers: Record<string, string>;
+  // Per-job, human-approved answers (e.g. essay questions): first label
+  // substring match wins, checked before every generic rule.
+  custom?: { match: string; value: string }[];
   // Fields we deliberately leave for the human (null in profile → ask):
   unknown: string[];
 }
@@ -68,6 +71,11 @@ export function buildFields(profile: Profile): ApplicantFields {
 export function answerFor(label: string, fields: ApplicantFields): string | null {
   const l = label.toLowerCase();
   const country = fields.country.toLowerCase();
+
+  // Human-approved per-job answers take precedence over every generic rule.
+  for (const c of fields.custom ?? []) {
+    if (l.includes(c.match.toLowerCase())) return c.value;
+  }
   if (/first name/.test(l)) return fields.firstName;
   if (/last name/.test(l)) return fields.lastName;
   if (/full name|^name$/.test(l)) return fields.fullName;

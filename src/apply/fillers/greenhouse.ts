@@ -42,6 +42,24 @@ export async function fillGreenhouse(
     }
   }
 
+  // Location (City) on new job boards is a react-select autocomplete: a plain
+  // fill() never registers a value, so type and commit the first suggestion.
+  const loc = page.locator("#candidate-location").first();
+  if (await loc.count()) {
+    await loc.click().catch(() => {});
+    await loc.pressSequentially(fields.location, { delay: 60 }).catch(() => {});
+    // ".select__option" scoped and :visible — a bare [role="option"] matches the
+    // hidden phone-widget country list and clicks nothing.
+    const opt = page.locator(".select__option:visible").first();
+    const appeared = await opt.waitFor({ timeout: 6000 }).then(() => true).catch(() => false);
+    if (!appeared) {
+      await loc.fill("").catch(() => {});
+      await loc.pressSequentially(fields.location.split(",")[0]!, { delay: 60 }).catch(() => {});
+      await opt.waitFor({ timeout: 6000 }).catch(() => {});
+    }
+    if (await opt.isVisible().catch(() => false)) await opt.click().catch(() => {});
+  }
+
   // Let the generic walker handle any remaining required custom questions and
   // report anything it can't answer for the human.
   return fillGeneric(page, fields, resumePath);

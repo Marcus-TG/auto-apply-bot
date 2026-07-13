@@ -1,9 +1,14 @@
 /**
  * Agentic browser filler — the universal fallback for messy/unknown/layered career
  * sites (Phenom → iCIMS, Workday, bespoke portals) where a hardcoded filler doesn't
- * fit. Instead of per-ATS selectors, it drives the live Playwright page with a Claude
- * tool loop: observe the page → fill/click/upload → re-observe → repeat, through
+ * fit. Instead of per-ATS selectors, it drives the live Playwright page with a model
+ * loop: observe the page → fill/click/upload → re-observe → repeat, through
  * multi-step flows, until it submits or hits a wall it must hand to the human.
+ *
+ * The loop asks for ONE structured action per step via callStructured(), so it runs
+ * on whatever MODEL_GENERATION is set to — `claude-cli:` (subscription-billed CLI),
+ * `ollama:`/`local:`, or a real API model id. Each step resends the transcript, with
+ * stale page snapshots elided so only the latest observation carries full detail.
  *
  * Boundaries (by design, not weakness):
  *  - It never fabricates answers. Any required field not covered by the profile
@@ -13,9 +18,10 @@
  *  - DRY_RUN gates the one explicit submit tool — it fills everything but never
  *    actually sends.
  */
-import Anthropic from "@anthropic-ai/sdk";
+import { z } from "zod";
 import type { Page } from "playwright";
 import { config } from "../config/index.js";
+import { callStructured } from "../llm/client.js";
 import { events, submissions } from "../store/repositories.js";
 import type { JobPosting, TailoredApplication, SubmitResult } from "../types/index.js";
 import type { ApplicantFields } from "./field-map.js";
@@ -115,20 +121,26 @@ async function readConfirmation(page: Page): Promise<string | null> {
     : null;
 }
 
-const TOOLS: Anthropic.Tool[] = [
-  { name: "observe", description: "Snapshot the current page and list its interactive fields/buttons by index. Call this first and after every navigation.", input_schema: { type: "object", properties: {} } },
-  { name: "fill", description: "Type a value into a text/checkbox/radio/select field by its index.", input_schema: { type: "object", properties: { index: { type: "integer" }, value: { type: "string" } }, required: ["index", "value"] } },
-  { name: "click", description: "Click a button or link by index (for Next/Continue/expanders — NOT the final submit).", input_schema: { type: "object", properties: { index: { type: "integer" } }, required: ["index"] } },
-  { name: "upload_resume", description: "Upload the tailored resume PDF into a file input by index.", input_schema: { type: "object", properties: { index: { type: "integer" } }, required: ["index"] } },
-  { name: "submit_application", description: "Perform the FINAL submit by clicking the submit button at the given index. Use only when the whole form is complete.", input_schema: { type: "object", properties: { index: { type: "integer" } }, required: ["index"] } },
-  { name: "ask_human", description: "Stop and hand off to the human for anything requiring their identity or judgment: login/account creation, email verification, CAPTCHA, or a required question not answered by the profile.", input_schema: { type: "object", properties: { reason: { type: "string" } }, required: ["reason"] } },
-];
+const DecisionSchema = z.object({
+  tool: z.enum(["observe", "fill", "click", "upload_resume", "submit_application", "ask_human"]),
+  index: z.number().int().optional(),
+  value: z.string().optional(),
+  reason: z.string().optional(),
+});
+type Decision = z.infer<typeof DecisionSchema>;
 
-const SYSTEM = `You complete a job application by operating a real browser through tools.
+const SYSTEM = `You complete a job application by operating a real browser, one action per turn.
 You START already on the application page.
 
-Loop: observe → fill/click/upload_resume → observe again → continue through multi-step
-flows until submitted.
+Actions (return exactly one per turn):
+- observe — snapshot the current page and list its interactive fields/buttons by index.
+  Do this first, and again after any click/navigation that changes the page.
+- fill — type \`value\` into the text/checkbox/radio/select field at \`index\`.
+- click — click the button/link at \`index\` (Next/Continue/expanders — NOT the final submit).
+- upload_resume — upload the tailored resume PDF into the file input at \`index\`.
+- submit_application — perform the FINAL submit via the button at \`index\`. Only when the
+  whole form is complete.
+- ask_human — stop and hand off, with \`reason\`.
 
 Hard rules:
 - Use ONLY the provided applicant profile. NEVER invent answers. For any required field
@@ -141,6 +153,27 @@ Hard rules:
 - To submit, use submit_application (never a plain click on the final submit button).
 - Be efficient: skip fields already correct; don't re-observe needlessly.`;
 
+interface TranscriptEntry {
+  action: string;
+  result: string;
+  /** Full page snapshots are only worth tokens while current; older ones are elided. */
+  isSnapshot: boolean;
+}
+
+function renderTranscript(transcript: TranscriptEntry[]): string {
+  if (transcript.length === 0) return "No actions taken yet. Start with observe.";
+  const lastSnapshot = transcript.reduce((acc, t, i) => (t.isSnapshot ? i : acc), -1);
+  return transcript
+    .map((t, i) => {
+      const result =
+        t.isSnapshot && i !== lastSnapshot
+          ? "[stale page snapshot omitted — observe again if you need current state]"
+          : t.result;
+      return `${i + 1}. ${t.action} → ${result}`;
+    })
+    .join("\n");
+}
+
 export async function runAgenticApplication(
   page: Page,
   job: JobPosting,
@@ -148,8 +181,6 @@ export async function runAgenticApplication(
   fields: ApplicantFields,
   liveViewUrl: string | null,
 ): Promise<SubmitResult> {
-  const anthropic = new Anthropic({ apiKey: config.env.anthropicApiKey });
-
   const profileBlock = JSON.stringify(
     {
       name: fields.fullName,
@@ -167,95 +198,101 @@ export async function runAgenticApplication(
     2,
   );
 
-  const messages: Anthropic.MessageParam[] = [
-    {
-      role: "user",
-      content: `Apply to: ${job.title} at ${job.company}
-Applicant profile (the only facts you may use):
-${profileBlock}
+  const task = `Apply to: ${job.title} at ${job.company}
+The tailored resume PDF is already on disk and will be attached when you use upload_resume.`;
 
-The tailored resume PDF is already on disk and will be attached when you call upload_resume.
-Begin by calling observe.`,
-    },
-  ];
-
+  const transcript: TranscriptEntry[] = [];
   let terminal: SubmitResult | null = null;
+  let decisionFailures = 0;
 
   for (let step = 0; step < config.env.agenticMaxSteps && !terminal; step++) {
-    const resp = await anthropic.messages.create({
-      model: config.env.modelGeneration,
-      max_tokens: 1500,
-      system: SYSTEM,
-      tools: TOOLS,
-      messages,
-    });
-    messages.push({ role: "assistant", content: resp.content });
-
-    const toolUses = resp.content.filter((c): c is Anthropic.ToolUseBlock => c.type === "tool_use");
-    if (toolUses.length === 0) {
-      terminal = { status: "needs_human", reason: "agent stopped without taking an action", liveViewUrl };
-      break;
-    }
-
-    const results: Anthropic.ToolResultBlockParam[] = [];
-    for (const tu of toolUses) {
-      const input = (tu.input ?? {}) as Record<string, unknown>;
-      let content = "ok";
-      try {
-        switch (tu.name) {
-          case "observe":
-            content = JSON.stringify(await observe(page));
-            break;
-          case "fill":
-            await fillField(page, Number(input.index), String(input.value));
-            content = `filled field ${input.index}`;
-            break;
-          case "click":
-            await page.locator(`[data-agent-idx="${Number(input.index)}"]`).first().click();
-            await page.waitForLoadState("domcontentloaded").catch(() => {});
-            content = `clicked ${input.index}`;
-            break;
-          case "upload_resume":
-            await page.locator(`[data-agent-idx="${Number(input.index)}"]`).first().setInputFiles(app.resumePath);
-            content = "resume uploaded";
-            break;
-          case "ask_human":
-            events.log({ jobId: job.id, kind: "agent_needs_human", data: { reason: String(input.reason) } });
-            terminal = { status: "needs_human", reason: String(input.reason), liveViewUrl };
-            content = "handed off to human";
-            break;
-          case "submit_application":
-            if (config.env.dryRun) {
-              await page.screenshot({ path: app.resumePath.replace(/resume\.pdf$/, "presubmit.png") }).catch(() => {});
-              events.log({ jobId: job.id, kind: "agent_dry_run_submit", data: {} });
-              terminal = { status: "submitted", confirmation: "DRY_RUN (not actually submitted)" };
-              content = "DRY_RUN — submit simulated, not sent";
-              break;
-            }
-            await page.locator(`[data-agent-idx="${Number(input.index)}"]`).first().click();
-            await page.waitForLoadState("networkidle").catch(() => {});
-            {
-              const conf = await readConfirmation(page);
-              if (conf) {
-                submissions.record(job.id, conf);
-                events.log({ jobId: job.id, kind: "agent_submitted", data: { confirmation: conf } });
-                terminal = { status: "submitted", confirmation: conf };
-                content = "submitted";
-              } else {
-                terminal = { status: "needs_human", reason: "clicked submit but no confirmation page detected", liveViewUrl };
-                content = "no confirmation detected — handed off";
-              }
-            }
-            break;
-          default:
-            content = `unknown tool ${tu.name}`;
-        }
-      } catch (err) {
-        content = `error: ${String(err)}`;
+    let decision: Decision;
+    try {
+      decision = await callStructured({
+        model: config.env.modelGeneration,
+        system: SYSTEM,
+        cachedContext: [
+          { label: "Applicant profile (the only facts you may use)", text: profileBlock },
+        ],
+        userPrompt: `${task}\n\nActions so far:\n${renderTranscript(transcript)}\n\nWhat is your single next action?`,
+        tool: {
+          name: "next_action",
+          description: "The single next browser action to take.",
+          schema: DecisionSchema,
+        },
+        maxTokens: 1000,
+      });
+      decisionFailures = 0;
+    } catch (err) {
+      if (++decisionFailures >= 2) {
+        terminal = { status: "needs_human", reason: `agent decision failed: ${String(err).slice(0, 300)}`, liveViewUrl };
+        break;
       }
-      results.push({ type: "tool_result", tool_use_id: tu.id, content });
+      continue;
     }
-    messages.push({ role: "user", content: results });
+
+    const idx = decision.index;
+    const action =
+      decision.tool +
+      (idx !== undefined ? `(index=${idx}${decision.value !== undefined ? `, value=${JSON.stringify(decision.value)}` : ""})` : decision.reason ? `(${decision.reason})` : "");
+    let result = "ok";
+    let isSnapshot = false;
+    try {
+      switch (decision.tool) {
+        case "observe":
+          result = JSON.stringify(await observe(page));
+          isSnapshot = true;
+          break;
+        case "fill":
+          if (idx === undefined || decision.value === undefined) throw new Error("fill needs index and value");
+          await fillField(page, idx, decision.value);
+          result = `filled field ${idx}`;
+          break;
+        case "click":
+          if (idx === undefined) throw new Error("click needs index");
+          await page.locator(`[data-agent-idx="${idx}"]`).first().click();
+          await page.waitForLoadState("domcontentloaded").catch(() => {});
+          result = `clicked ${idx}`;
+          break;
+        case "upload_resume":
+          if (idx === undefined) throw new Error("upload_resume needs index");
+          await page.locator(`[data-agent-idx="${idx}"]`).first().setInputFiles(app.resumePath);
+          result = "resume uploaded";
+          break;
+        case "ask_human":
+          events.log({ jobId: job.id, kind: "agent_needs_human", data: { reason: String(decision.reason ?? "unspecified") } });
+          terminal = { status: "needs_human", reason: String(decision.reason ?? "unspecified"), liveViewUrl };
+          result = "handed off to human";
+          break;
+        case "submit_application":
+          if (config.env.dryRun) {
+            await page.screenshot({ path: app.resumePath.replace(/resume\.pdf$/, "presubmit.png") }).catch(() => {});
+            events.log({ jobId: job.id, kind: "agent_dry_run_submit", data: {} });
+            terminal = { status: "submitted", confirmation: "DRY_RUN (not actually submitted)" };
+            result = "DRY_RUN — submit simulated, not sent";
+            break;
+          }
+          if (idx === undefined) throw new Error("submit_application needs index");
+          await page.locator(`[data-agent-idx="${idx}"]`).first().click();
+          await page.waitForLoadState("networkidle").catch(() => {});
+          {
+            const conf = await readConfirmation(page);
+            if (conf) {
+              submissions.record(job.id, conf);
+              events.log({ jobId: job.id, kind: "agent_submitted", data: { confirmation: conf } });
+              terminal = { status: "submitted", confirmation: conf };
+              result = "submitted";
+            } else {
+              terminal = { status: "needs_human", reason: "clicked submit but no confirmation page detected", liveViewUrl };
+              result = "no confirmation detected — handed off";
+            }
+          }
+          break;
+      }
+    } catch (err) {
+      result = `error: ${String(err)}`;
+    }
+    transcript.push({ action, result, isSnapshot });
   }
 
   if (!terminal) {

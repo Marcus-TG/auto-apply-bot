@@ -86,6 +86,30 @@ export async function fillGeneric(
     await humanPause();
   }
 
+  // Checkboxes (consent/acknowledgement): check only when a rule or approved
+  // custom answer explicitly says yes — never auto-consent.
+  const checkboxes = page.locator('input[type="checkbox"]');
+  const nCb = await checkboxes.count();
+  for (let i = 0; i < nCb; i++) {
+    const el = checkboxes.nth(i);
+    const required = (await el.getAttribute("required")) !== null || (await el.getAttribute("aria-required")) === "true";
+    const label = await labelFor(page, el);
+    if (!label) continue;
+    const value = answerFor(label, fields);
+    if (value == null) {
+      if (required) unresolved.push(label);
+      continue;
+    }
+    if (/^(yes|true|checked)$/i.test(value)) {
+      await el.check().catch(() => {
+        if (required) unresolved.push(label);
+      });
+      await humanPause();
+    } else if (required) {
+      unresolved.push(label);
+    }
+  }
+
   return { ready: unresolved.length === 0, unresolved };
 }
 

@@ -27,6 +27,10 @@ import { fillLever, LEVER_SUBMIT } from "../src/apply/fillers/lever.js";
 import { detectAts } from "../src/apply/ats-detect.js";
 import { detectChallenge } from "../src/apply/captcha.js";
 
+// Ashby renders a classed <button> with no type attribute; fall back on text.
+const ASHBY_SUBMIT =
+  'button.ashby-application-form-submit-button, button:has-text("Submit Application"), button[type="submit"]';
+
 const ID = process.env.SUBMIT_JOB_ID ?? "";
 if (!/^[0-9a-f]{16}$/.test(ID)) {
   console.error("Set SUBMIT_JOB_ID to a job id.");
@@ -101,12 +105,19 @@ async function main() {
     log("form filled clean; presubmit.png saved");
 
     if (config.env.dryRun) {
+      const committed = await page
+        .locator(".select__single-value, .select__multi-value__label")
+        .allInnerTexts()
+        .catch(() => [] as string[]);
+      if (committed.length) log(`dry-run dropdown values: ${JSON.stringify(committed)}`);
       log("DRY_RUN — stopping before the submit click");
       return;
     }
 
     const clickedAt = Date.now();
-    await page.locator(ats === "lever" ? LEVER_SUBMIT : GREENHOUSE_SUBMIT).last().click();
+    const submitSel =
+      ats === "lever" ? LEVER_SUBMIT : ats === "ashby" ? ASHBY_SUBMIT : GREENHOUSE_SUBMIT;
+    await page.locator(submitSel).last().click();
     await page.waitForTimeout(4000);
 
     // Success, or a Greenhouse security-code gate — poll for the emailed code
