@@ -24,6 +24,7 @@ import { buildApplicantFields } from "../src/apply/index.js";
 import { CONFIRMATION_RE } from "../src/apply/index.js";
 import { fillGreenhouse, GREENHOUSE_SUBMIT } from "../src/apply/fillers/greenhouse.js";
 import { fillLever, LEVER_SUBMIT } from "../src/apply/fillers/lever.js";
+import { fillAshby } from "../src/apply/fillers/ashby.js";
 import { detectAts } from "../src/apply/ats-detect.js";
 import { detectChallenge } from "../src/apply/captcha.js";
 
@@ -89,13 +90,19 @@ async function main() {
     await page.goto(job.applyUrl ?? job.url, { waitUntil: "domcontentloaded", timeout: 60000 });
     await page.waitForTimeout(2000);
     if (await detectChallenge(page)) throw new Error("blocking captcha/interstitial — hand off to human");
+    const bodyText = ((await page.locator("body").innerText().catch(() => "")) ?? "").toLowerCase();
+    if (/page not found|no longer (open|accepting)|job you.re looking for/.test(bodyText)) {
+      throw new Error("posting page is dead or closed — check the job URL / liveness");
+    }
 
     const ats = await detectAts(page);
     const coverLetter = { path: app.coverLetterPath, text: app.coverLetterText };
     const outcome =
       ats === "lever"
         ? await fillLever(page, fields, app.resumePath, coverLetter)
-        : await fillGreenhouse(page, fields, app.resumePath, coverLetter);
+        : ats === "ashby"
+          ? await fillAshby(page, fields, app.resumePath, coverLetter)
+          : await fillGreenhouse(page, fields, app.resumePath, coverLetter);
     if (!outcome.ready) {
       log(`UNRESOLVED required fields — answer these in answers.json:\n  - ${outcome.unresolved.join("\n  - ")}`);
       await page.screenshot({ path: resolve(ART, "presubmit.png"), fullPage: true });
@@ -126,7 +133,12 @@ async function main() {
     const deadline = Date.now() + 20 * 60_000;
     while (Date.now() < deadline) {
       const body = ((await page.locator("body").innerText().catch(() => "")) ?? "").toLowerCase();
-      if (CONFIRMATION_RE.test(body)) {
+      // The job description itself can contain phrases like "we thank you",
+      // which CONFIRMATION_RE matches. Only trust it once the security-code
+      // gate is gone AND the submit button has left the page.
+      const codeGate = /security code|verification code/.test(body);
+      const submitStillThere = (await page.locator(submitSel).count().catch(() => 0)) > 0;
+      if (!codeGate && !submitStillThere && CONFIRMATION_RE.test(body)) {
         await page.screenshot({ path: resolve(ART, "postsubmit.png") });
         submissions.record(ID, page.url());
         jobs.setStatus(ID, "submitted");
@@ -134,7 +146,7 @@ async function main() {
         log(`CONFIRMED SUBMITTED: ${page.url()}`);
         return;
       }
-      if (!/security code|verification code/.test(body)) {
+      if (!codeGate) {
         await page.screenshot({ path: resolve(ART, "postsubmit.png") });
         log("no confirmation and no code gate — inspect postsubmit.png");
       }
