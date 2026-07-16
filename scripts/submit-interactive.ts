@@ -21,6 +21,7 @@ import { resolve } from "node:path";
 import { config } from "../src/config/index.js";
 import { jobs, applications, submissions, events } from "../src/store/repositories.js";
 import { buildApplicantFields } from "../src/apply/index.js";
+import { answerFor } from "../src/apply/field-map.js";
 import { CONFIRMATION_RE } from "../src/apply/index.js";
 import { fillGreenhouse, GREENHOUSE_SUBMIT } from "../src/apply/fillers/greenhouse.js";
 import { fillLever, LEVER_SUBMIT } from "../src/apply/fillers/lever.js";
@@ -130,9 +131,65 @@ async function main() {
     // Success, or a Greenhouse security-code gate — poll for the emailed code
     // (manual drop file first, then whatever the n8n courier delivered).
     let lastTried = "";
+    let correctionTries = 0;
     const deadline = Date.now() + 20 * 60_000;
     while (Date.now() < deadline) {
       const body = ((await page.locator("body").innerText().catch(() => "")) ?? "").toLowerCase();
+      // Ashby "Your form needs corrections" banner: a control we filled can
+      // come back empty when its React state never committed (currency inputs
+      // are the known case). Re-fill whatever is blank with key events — the
+      // most committed input path — and resubmit.
+      if (correctionTries < 3 && /needs corrections|missing entry for required field/.test(body)) {
+        correctionTries++;
+        // The banner names each missing field; re-apply exactly those answers
+        // with key events (React state can drop a value the DOM still shows).
+        const missing = (await page.locator('li:has-text("Missing entry")').allInnerTexts().catch(() => [] as string[]))
+          .map((t) => t.replace(/missing entry for required field:?/i, "").trim().toLowerCase())
+          .filter(Boolean);
+        log(`corrections banner (attempt ${correctionTries}): ${missing.join(" | ") || "(labels not parsed)"}`);
+        const entries = page.locator(".ashby-application-form-field-entry, [class*='_fieldEntry']");
+        const total = await entries.count();
+        for (let i = 0; i < total; i++) {
+          const entry = entries.nth(i);
+          const label = ((await entry.locator("label, [class*='question-title']").first().innerText().catch(() => "")) ?? "")
+            .replace(/\*\s*$/, "")
+            .trim();
+          if (!label) continue;
+          const l40 = label.toLowerCase().slice(0, 40);
+          const flagged = missing.length
+            ? missing.some((m) => m.slice(0, 40) === l40 || m.startsWith(l40) || label.toLowerCase().startsWith(m.slice(0, 40)))
+            : true;
+          if (!flagged) continue;
+          const value = answerFor(label, fields);
+          if (value == null) continue;
+          const toggle = entry.locator("button", { hasText: /^(yes|no)$/i });
+          if ((await toggle.count()) >= 2 && /^(yes|no)$/i.test(value)) {
+            log(`re-clicking toggle "${label.slice(0, 60)}" -> ${value}`);
+            await entry.locator("button", { hasText: new RegExp(`^${value}$`, "i") }).first().click().catch(() => {});
+            continue;
+          }
+          const checkbox = entry.locator('input[type="checkbox"]');
+          if ((await checkbox.count()) && /^(yes|true|checked)$/i.test(value)) {
+            log(`re-checking "${label.slice(0, 60)}"`);
+            const cb = checkbox.first();
+            // Cycle through real click events so React state commits even when
+            // the DOM already shows the box as checked.
+            await cb.uncheck({ force: true }).catch(() => {});
+            await cb.click({ force: true }).catch(() => {});
+            continue;
+          }
+          const input = entry.locator('input[type="text"], input[type="number"], input:not([type]), textarea').first();
+          if (!(await input.count())) continue;
+          log(`re-typing "${label.slice(0, 60)}"`);
+          await input.click().catch(() => {});
+          await input.fill("").catch(() => {});
+          await input.pressSequentially(value.slice(0, 4000), { delay: 10 }).catch(() => {});
+          await input.press("Tab").catch(() => {});
+        }
+        await page.locator(submitSel).last().click().catch(() => {});
+        await page.waitForTimeout(4000);
+        continue;
+      }
       // The job description itself can contain phrases like "we thank you",
       // which CONFIRMATION_RE matches. Only trust it once the security-code
       // gate is gone AND the submit button has left the page.
