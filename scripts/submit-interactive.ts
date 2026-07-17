@@ -26,6 +26,8 @@ import { CONFIRMATION_RE } from "../src/apply/index.js";
 import { fillGreenhouse, GREENHOUSE_SUBMIT } from "../src/apply/fillers/greenhouse.js";
 import { fillLever, LEVER_SUBMIT } from "../src/apply/fillers/lever.js";
 import { fillAshby } from "../src/apply/fillers/ashby.js";
+import { fillWorkable, WORKABLE_SUBMIT } from "../src/apply/fillers/workable.js";
+import { fillJazzHR, JAZZHR_SUBMIT } from "../src/apply/fillers/jazzhr.js";
 import { detectAts } from "../src/apply/ats-detect.js";
 import { detectChallenge } from "../src/apply/captcha.js";
 
@@ -103,7 +105,11 @@ async function main() {
         ? await fillLever(page, fields, app.resumePath, coverLetter)
         : ats === "ashby"
           ? await fillAshby(page, fields, app.resumePath, coverLetter)
-          : await fillGreenhouse(page, fields, app.resumePath, coverLetter);
+          : ats === "workable"
+            ? await fillWorkable(page, fields, app.resumePath)
+            : ats === "jazzhr"
+              ? await fillJazzHR(page, fields, app.resumePath, coverLetter)
+              : await fillGreenhouse(page, fields, app.resumePath, coverLetter);
     if (!outcome.ready) {
       log(`UNRESOLVED required fields — answer these in answers.json:\n  - ${outcome.unresolved.join("\n  - ")}`);
       await page.screenshot({ path: resolve(ART, "presubmit.png"), fullPage: true });
@@ -124,7 +130,15 @@ async function main() {
 
     const clickedAt = Date.now();
     const submitSel =
-      ats === "lever" ? LEVER_SUBMIT : ats === "ashby" ? ASHBY_SUBMIT : GREENHOUSE_SUBMIT;
+      ats === "lever"
+        ? LEVER_SUBMIT
+        : ats === "ashby"
+          ? ASHBY_SUBMIT
+          : ats === "workable"
+            ? WORKABLE_SUBMIT
+            : ats === "jazzhr"
+              ? JAZZHR_SUBMIT
+              : GREENHOUSE_SUBMIT;
     await page.locator(submitSel).last().click();
     await page.waitForTimeout(4000);
 

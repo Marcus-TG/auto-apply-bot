@@ -10,6 +10,8 @@ export interface ApplicantFields {
   email: string;
   phone: string;
   location: string;
+  /** Street-level mailing address, for ATSes that require one (Workable, JazzHR). */
+  address?: { street: string; city: string; region: string; postal: string };
   /** Country of work authorization, e.g. "Canada". */
   country: string;
   requiresSponsorship: boolean;
@@ -31,6 +33,7 @@ interface Profile {
     email: string;
     phone: string;
     location: string;
+    address?: { street: string; city: string; region: string; postal: string } | null;
     links: { linkedin?: string | null; portfolio?: string | null; github?: string | null };
   };
   workAuthorization?: { authorizedIn?: string[]; requiresSponsorship?: boolean };
@@ -52,6 +55,7 @@ export function buildFields(profile: Profile): ApplicantFields {
     email: profile.identity.email,
     phone: profile.identity.phone,
     location: profile.identity.location,
+    address: profile.identity.address ?? undefined,
     country: profile.workAuthorization?.authorizedIn?.[0] ?? "",
     requiresSponsorship: profile.workAuthorization?.requiresSponsorship ?? true,
     linkedin: profile.identity.links.linkedin ?? undefined,
@@ -89,7 +93,7 @@ export function answerFor(label: string, fields: ApplicantFields): string | null
   // sponsorship questions get a direct answer; "authorized/located in X" only
   // when X is the candidate's own country — anything else stays with the human.
   if (/sponsor/.test(l)) return fields.requiresSponsorship ? "Yes" : "No";
-  if (country && new RegExp(`(authori[sz]ed|legal(ly)? .*work|located|resid|living|relocat).*${country}`).test(l)) {
+  if (country && new RegExp(`(authori[sz](ed|ation)|legal(ly)? .*work|located|resid|living|relocat).*${country}`).test(l)) {
     return "Yes";
   }
   if (/\bcountry\b/.test(l)) return fields.country || null;
@@ -102,7 +106,16 @@ export function answerFor(label: string, fields: ApplicantFields): string | null
     return fields.answers.employmentRestrictions ?? null;
   }
 
-  if (/location|city/.test(l)) return fields.location;
+  // Mailing-address fields (Workable/JazzHR require the full block). Only
+  // answered when the profile carries a street address — never derived.
+  if (/address (line )?1|street address|^address\b/.test(l)) return fields.address?.street ?? null;
+  if (/postal|zip/.test(l)) return fields.address?.postal ?? null;
+  if (/province|\bstate\b/.test(l)) return fields.address?.region ?? null;
+
+  // Word-bounded: a bare /city/ also matches "ethni-city" and leaks the
+  // candidate's location into EEO demographic selects.
+  if (/\bcity\b/.test(l)) return fields.address?.city ?? fields.location;
+  if (/\blocation\b/.test(l)) return fields.location;
   if (/notice period/.test(l)) return fields.answers.noticePeriod ?? null;
   if (/how did you hear/.test(l)) return fields.answers.howDidYouHear ?? null;
   if (/salary|compensation expectation/.test(l)) return fields.answers.desiredSalary ?? null;
