@@ -1,9 +1,7 @@
 /**
  * Discovery registry + runner. Iterates enabled sources, runs each adapter,
- * dedupes, and upserts new jobs into the store.
- *
- * ToS guardrail: LinkedIn/Indeed adapters are only constructed when both their
- * config flag AND the env kill-switch are on (see config.sourceAllowed).
+ * dedupes, and upserts new jobs into the store. Sources needing credentials
+ * are skipped unless configured (see config.sourceAllowed).
  */
 import { config, sourceAllowed } from "../config/index.js";
 import { jobs, events } from "../store/repositories.js";
@@ -18,8 +16,6 @@ import { workableAdapter } from "./workable.js";
 import { remotiveAdapter } from "./remotive.js";
 import { weworkremotelyAdapter } from "./weworkremotely.js";
 import { adzunaAdapter } from "./adzuna.js";
-import { linkedinAdapter } from "./linkedin.js";
-import { indeedAdapter } from "./indeed.js";
 
 export interface SourceEntryConfig {
   kind: string;
@@ -42,8 +38,6 @@ const REGISTRY: Record<string, SourceAdapter> = {
   remotive: remotiveAdapter,
   weworkremotely: weworkremotelyAdapter,
   adzuna: adzunaAdapter,
-  linkedin: linkedinAdapter,
-  indeed: indeedAdapter,
 };
 
 export interface DiscoveryResult {

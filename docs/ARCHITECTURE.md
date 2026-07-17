@@ -56,4 +56,4 @@ nodes, while still getting n8n's scheduling and approval-wait for free.
 
 See also: [DATA-MODEL.md](./DATA-MODEL.md), [SCORING.md](./SCORING.md),
 [APPROVAL-FLOW.md](./APPROVAL-FLOW.md), [EDGE-CASES.md](./EDGE-CASES.md),
-[TOS-AND-SAFETY.md](./TOS-AND-SAFETY.md), [RUNBOOK.md](./RUNBOOK.md).
+[RUNBOOK.md](./RUNBOOK.md).

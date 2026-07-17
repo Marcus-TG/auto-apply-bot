@@ -13,8 +13,6 @@ discover → dedupe → prefilter → LLM fit-score → tailor → gate (auto|hu
 - **Discovers** jobs from ATS-direct JSON APIs (Greenhouse, Lever, Ashby, Workday,
   SmartRecruiters, Workable) and API-sanctioned aggregators (Remotive,
   We Work Remotely, Adzuna).
-  LinkedIn/Indeed adapters exist but ship as ToS-gated stubs — see
-  [docs/TOS-AND-SAFETY.md](docs/TOS-AND-SAFETY.md).
 - **Scores fit** in two stages: a free deterministic prefilter, then a Claude rubric
   score (prompt-cached profile, structured JSON output). See [docs/SCORING.md](docs/SCORING.md).
 - **Tailors honestly**: picks the best of your resume variants and selects from a
@@ -63,9 +61,8 @@ your approval. Full walkthrough: [docs/RUNBOOK.md](docs/RUNBOOK.md).
 
 ## Safety defaults
 
-`DRY_RUN=true`, `autoApplyEnabled=false`, LinkedIn/Indeed off, 15 submissions/day
-cap, CAPTCHAs handed to you. Turn these up deliberately as you build trust. Rationale
-in [docs/TOS-AND-SAFETY.md](docs/TOS-AND-SAFETY.md).
+`DRY_RUN=true`, `autoApplyEnabled=false`, 15 submissions/day cap, CAPTCHAs handed
+to you. Turn these up deliberately as you build trust.
 
 ## Docs
 
@@ -77,7 +74,7 @@ in [docs/TOS-AND-SAFETY.md](docs/TOS-AND-SAFETY.md).
 | [APPROVAL-FLOW.md](docs/APPROVAL-FLOW.md) | Lanes, the gate, timeouts |
 | [EDGE-CASES.md](docs/EDGE-CASES.md) | Missing fields, CAPTCHAs, site variation |
 | [KERNEL-SELF-HOST.md](docs/KERNEL-SELF-HOST.md) | Browser backend options |
-| [TOS-AND-SAFETY.md](docs/TOS-AND-SAFETY.md) | Source posture & safe operation |
+| [WORKDAY.md](docs/WORKDAY.md) | Driving Workday's wizard interactively |
 | [RUNBOOK.md](docs/RUNBOOK.md) | Setup, running, rollout order |
 
 ## Where to customize

@@ -1,5 +1,5 @@
 /**
- * SmartRecruiters public postings API. ToS-friendly JSON, no auth.
+ * SmartRecruiters public postings API. JSON, no auth.
  *   List:   https://api.smartrecruiters.com/v1/companies/<id>/postings?limit=100
  *   Detail: https://api.smartrecruiters.com/v1/companies/<id>/postings/<postingId>
  * `id` is the company identifier in jobs.smartrecruiters.com/<id>/... URLs.

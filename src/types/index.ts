@@ -10,7 +10,7 @@
  */
 import { z } from "zod";
 
-/** Where a posting came from. ATS-direct sources are ToS-friendly; aggregators are not. */
+/** Where a posting came from. */
 export const SourceKind = z.enum([
   "greenhouse",
   "lever",
@@ -21,8 +21,6 @@ export const SourceKind = z.enum([
   "remotive", // aggregator, public API (link back to their URL; poll sparingly)
   "weworkremotely", // aggregator, public RSS
   "adzuna", // aggregator, official API — gated behind ADZUNA_APP_ID/KEY
-  "linkedin", // ToS-restricted — gated behind ENABLE_LINKEDIN
-  "indeed", // ToS-restricted — gated behind ENABLE_INDEED
   "manual",
 ]);
 export type SourceKind = z.infer<typeof SourceKind>;

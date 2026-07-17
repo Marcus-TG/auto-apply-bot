@@ -1,5 +1,5 @@
 /**
- * Lever public postings API. ToS-friendly JSON, no auth.
+ * Lever public postings API. JSON, no auth.
  *   https://api.lever.co/v0/postings/<handle>?mode=json
  * `handle` is the company slug in jobs.lever.co/<handle>.
  */

@@ -1,5 +1,5 @@
 /**
- * Workable public widget API. ToS-friendly JSON, no auth.
+ * Workable public widget API. JSON, no auth.
  *   List:   https://apply.workable.com/api/v1/widget/accounts/<account>
  *   Detail: https://apply.workable.com/api/v2/accounts/<account>/jobs/<shortcode>
  * `account` is the slug in apply.workable.com/<account>/.

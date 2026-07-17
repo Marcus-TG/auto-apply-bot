@@ -1,5 +1,5 @@
 /**
- * Greenhouse public boards API. ToS-friendly JSON, no auth.
+ * Greenhouse public boards API. JSON, no auth.
  *   Jobs:   https://boards-api.greenhouse.io/v1/boards/<token>/jobs?content=true
  * `token` is the board slug in boards.greenhouse.io/<token>.
  */

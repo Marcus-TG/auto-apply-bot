@@ -54,18 +54,6 @@
       "enabled": true,
       "queries": ["marketing manager @ toronto"],
       "notes": "Official API; blocked until ADZUNA_APP_ID/ADZUNA_APP_KEY are set (free key at developer.adzuna.com). Query syntax: 'what @ where'."
-    },
-    {
-      "kind": "linkedin",
-      "enabled": false,
-      "queries": ["senior marketing manager remote canada"],
-      "notes": "ToS-RESTRICTED. Requires ENABLE_LINKEDIN=true AND this flag. Browser-scraped. Ban risk."
-    },
-    {
-      "kind": "indeed",
-      "enabled": false,
-      "queries": ["growth marketing remote"],
-      "notes": "ToS-RESTRICTED. Requires ENABLE_INDEED=true AND this flag. Browser-scraped. Ban risk."
     }
   ]
 }

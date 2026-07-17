@@ -1,5 +1,5 @@
 /**
- * Ashby public job board API. ToS-friendly JSON, no auth.
+ * Ashby public job board API. JSON, no auth.
  *   https://api.ashbyhq.com/posting-api/job-board/<org>?includeCompensation=true
  * `org` is the board name in jobs.ashbyhq.com/<org>.
  */

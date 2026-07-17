@@ -48,9 +48,9 @@ The open-source image is **just the browser**. The cloud adds a managed layer:
 **At single-user scale this barely matters** — you run one session at a time and
 drive it with Playwright, which the self-host image supports fully. The one real
 tradeoff: **anti-detection becomes your responsibility** rather than theirs. Given
-this project's posture (ATS-direct sources, CAPTCHA handoff, polite rate limits;
-see [TOS-AND-SAFETY.md](./TOS-AND-SAFETY.md)), that's an acceptable trade — you're not
-trying to out-run detection in the first place.
+this project's posture (ATS-direct sources, CAPTCHA handoff, polite rate limits),
+that's an acceptable trade — you're not trying to out-run detection in the first
+place.
 
 ## Recommendation
 
