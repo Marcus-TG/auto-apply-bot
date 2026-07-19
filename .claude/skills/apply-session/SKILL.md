@@ -24,7 +24,10 @@ the playbook for that final mile.
    with DRY_RUN on. Three outcomes:
    - exit 2: it prints the required questions it can't answer. Bring them to
      the user (with proposed drafts grounded in their real materials when the
-     question is substantive). Eligibility questions revealing a mismatch
+     question is substantive). To ground a draft in project work, start from
+     `config/projects/INDEX.md` — a one-paragraph summary of every project
+     README with when-to-cite guidance — then open only the 1-2 relevant
+     READMEs. Eligibility questions revealing a mismatch
      (city residency, enrollment, work authorization) → recommend rejecting
      the job instead of answering around it.
    - captcha/interstitial error: hand off; do not attempt to bypass.
