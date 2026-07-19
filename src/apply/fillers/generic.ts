@@ -41,6 +41,9 @@ export async function fillGeneric(
       if (required) unresolved.push("(unlabelled required field)");
       continue;
     }
+    // Greenhouse's emailed security/verification code is entered at the submit
+    // gate by the post-submit polling loop, not during the fill walk.
+    if (/security code|verification code/i.test(label)) continue;
     const value = answerFor(label, fields);
     if (value == null) {
       if (required) unresolved.push(label);
