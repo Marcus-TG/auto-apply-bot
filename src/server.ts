@@ -180,12 +180,17 @@ app.get("/queue", (req, res) => {
       )
       .join("");
 
+  // Materials-ready rows float to the top so the next review is always in view.
   const queueRows = [...jobs.byStatus("scored"), ...jobs.byStatus("awaiting_approval")]
     .map((j) => ({ job: j, score: scores.get(j.id) }))
     .filter((r) => r.score)
-    .sort((a, b) => (b.score!.overall ?? 0) - (a.score!.overall ?? 0));
-  const approvedRows = jobs
-    .byStatus("approved")
+    .sort(
+      (a, b) =>
+        Number(b.job.status === "awaiting_approval") - Number(a.job.status === "awaiting_approval") ||
+        (b.score!.overall ?? 0) - (a.score!.overall ?? 0),
+    );
+  // needs_human jobs sit here too: same queue, just applied by hand.
+  const approvedRows = [...jobs.byStatus("approved"), ...jobs.byStatus("needs_human")]
     .map((j) => ({ job: j, score: scores.get(j.id) }))
     .filter((r) => r.score);
   const sentRows = submissions.all().map((s) => ({
@@ -202,15 +207,17 @@ app.get("/queue", (req, res) => {
       .map(
         ({ job, score }) => `<tr>
         <td><b>${score!.overall}</b></td>
-        <td>${esc(job.company)}</td>
+        <td>${esc(job.company)}${job.status === "needs_human" ? ' <span class="muted">(manual)</span>' : ""}</td>
         <td><a href="${esc(job.url)}">${esc(job.title.trim())}</a></td>
         <td>${esc(job.location ?? "")}</td>
         <td><a class="btn go" href="${baseUrl()}/review/${job.id}">Materials</a>
+            <a class="btn ok" href="${baseUrl()}/mark-sent/${job.id}">Mark sent</a>
             <a class="btn no" href="${baseUrl()}/reject-job/${job.id}?from=approved">Withdraw</a></td>
       </tr>`,
       )
       .join("");
-    body = `<p class="muted">These submit in the next apply session.</p>
+    body = `<p class="muted">These submit in the next apply session. Rows tagged (manual) need a hand-filed
+      application; use <b>Mark sent</b> after you submit one yourself.</p>
       <table><tr><th>Fit</th><th>Company</th><th>Role</th><th>Location</th><th></th></tr>${body}</table>`;
   } else if (tab === "sent") {
     body = sentRows
@@ -233,24 +240,46 @@ app.get("/queue", (req, res) => {
       .join("");
     body = `<table><tr><th>Sent</th><th>Company</th><th>Role</th><th></th><th>Pipeline</th></tr>${body}</table>`;
   } else {
-    body = queueRows
+    const filter = String(req.query.f ?? "all");
+    const readyCount = queueRows.filter((r) => r.job.status === "awaiting_approval").length;
+    const chipCounts = { all: queueRows.length, ready: readyCount, unprepped: queueRows.length - readyCount };
+    const chips = (
+      [
+        ["all", "All"],
+        ["ready", "Materials ready"],
+        ["unprepped", "Needs prep"],
+      ] as const
+    )
+      .map(
+        ([f, label]) =>
+          `<a class="chip${f === filter ? " active" : ""}" href="${baseUrl()}/queue?f=${f}">${label} (${chipCounts[f]})</a>`,
+      )
+      .join("");
+    const shownRows =
+      filter === "ready"
+        ? queueRows.filter((r) => r.job.status === "awaiting_approval")
+        : filter === "unprepped"
+          ? queueRows.filter((r) => r.job.status !== "awaiting_approval")
+          : queueRows;
+    body = shownRows
       .map(({ job, score }) => {
-        const action =
-          job.status === "scored"
-            ? `<a class="btn go" href="${baseUrl()}/tailor-one/${job.id}">Prepare materials</a>
-               <a class="btn no" href="${baseUrl()}/reject-job/${job.id}">Skip</a>`
-            : `<a class="btn go" href="${baseUrl()}/review/${job.id}">Review & decide</a>`;
-        return `<tr>
+        const ready = job.status === "awaiting_approval";
+        const action = ready
+          ? `<a class="btn go" href="${baseUrl()}/review/${job.id}">Review & decide</a>`
+          : `<a class="btn go" href="${baseUrl()}/tailor-one/${job.id}">Prepare materials</a>
+             <a class="btn no" href="${baseUrl()}/reject-job/${job.id}">Skip</a>`;
+        return `<tr${ready ? ' class="ready"' : ""}>
         <td><b>${score!.overall}</b></td>
         <td>${esc(job.company)}</td>
         <td><a href="${esc(job.url)}">${esc(job.title.trim())}</a></td>
         <td>${esc(job.location ?? "")}</td>
-        <td>${esc(job.status === "awaiting_approval" ? "materials ready" : "scored")}</td>
+        <td><span class="pill ${ready ? "ok" : "wait"}">${ready ? "materials ready" : "needs prep"}</span></td>
         <td>${action}</td>
       </tr>`;
       })
       .join("");
-    body = `<table><tr><th>Fit</th><th>Company</th><th>Role</th><th>Location</th><th>Status</th><th></th></tr>${body}</table>`;
+    body = `<div class="chips">${chips}</div>
+      <table><tr><th>Fit</th><th>Company</th><th>Role</th><th>Location</th><th>Status</th><th></th></tr>${body}</table>`;
   }
 
   res.send(`<!doctype html><html><head><meta charset="utf-8">
@@ -266,6 +295,12 @@ app.get("/queue", (req, res) => {
   .tab{display:inline-block;padding:8px 16px;border-radius:8px 8px 0 0;text-decoration:none;color:#44403c;font-weight:600}
   .tab.active{background:#fff;color:#1c1917;box-shadow:0 -1px 3px rgba(0,0,0,.06)}
   .muted{color:#78716c;font-size:.85rem}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.75rem;font-weight:600;white-space:nowrap}
+  .pill.ok{background:#dcfce7;color:#166534} .pill.wait{background:#e7e5e4;color:#78716c}
+  tr.ready td{background:#f0fdf4}
+  .chips{margin:10px 0}
+  .chip{display:inline-block;padding:4px 12px;border-radius:999px;text-decoration:none;font-size:.8rem;font-weight:600;color:#44403c;background:#e7e5e4;margin-right:6px}
+  .chip.active{background:#2563eb;color:#fff}
   form.inline{display:flex;gap:6px;align-items:center}
   form.inline input{flex:1;padding:5px 8px;border:1px solid #d6d3d1;border-radius:6px;min-width:120px}
   form.inline select{padding:5px;border:1px solid #d6d3d1;border-radius:6px}
@@ -308,11 +343,25 @@ app.get("/tailor-one/:jobId", (req, res) => {
     <p><a href="${baseUrl()}/queue">← back to queue</a></p>`);
 });
 
+// Mark an approved/manual job as submitted by hand (outside the browser worker).
+app.get("/mark-sent/:jobId", (req, res) => {
+  const jobId = req.params.jobId;
+  const job = jobs.get(jobId);
+  if (!job || !["approved", "needs_human"].includes(job.status)) {
+    res.status(409).send(`Not markable (status: ${job?.status ?? "unknown"}). <a href="${baseUrl()}/queue">back</a>`);
+    return;
+  }
+  submissions.record(jobId, null);
+  jobs.setStatus(jobId, "submitted");
+  events.log({ jobId, kind: "submitted", data: { manual: true } });
+  res.redirect(`${baseUrl()}/queue?tab=sent`);
+});
+
 // Skip a queued job / withdraw an approved one without submitting.
 app.get("/reject-job/:jobId", (req, res) => {
   const jobId = req.params.jobId;
   const job = jobs.get(jobId);
-  if (!job || !["scored", "approved", "awaiting_approval"].includes(job.status)) {
+  if (!job || !["scored", "approved", "awaiting_approval", "needs_human"].includes(job.status)) {
     res.status(409).send(`Not skippable (status: ${job?.status ?? "unknown"}). <a href="${baseUrl()}/queue">back</a>`);
     return;
   }
