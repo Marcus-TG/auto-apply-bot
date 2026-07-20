@@ -196,7 +196,9 @@ app.get("/queue", (req, res) => {
   const SORTS: Record<string, { label: string; cmp: (a: QueueRow, b: QueueRow) => number }> = {
     odds: {
       label: "Odds",
-      cmp: (a, b) => (b.odds?.odds ?? b.score!.overall) - (a.odds?.odds ?? a.score!.overall),
+      cmp: (a, b) =>
+        (b.odds?.odds ?? b.score!.overall) - (a.odds?.odds ?? a.score!.overall) ||
+        b.score!.overall - a.score!.overall, // fit breaks odds ties
     },
     fit: {
       label: "Fit",
