@@ -25,6 +25,8 @@ export interface SourceEntryConfig {
   /** Brand names for boards whose token/slug isn't the display name
    *  (e.g. ashby "posthog" → "PostHog"). Used on letters and the board. */
   displayNames?: Record<string, string>;
+  /** Country descriptors to narrow results to, for boards that support it (workday). */
+  countries?: string[];
   notes?: string;
 }
 

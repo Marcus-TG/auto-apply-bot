@@ -57,6 +57,16 @@ export async function submitApplication(
 
     const ats = await detectAts(page);
 
+    // Workday requires an applicant account + email verification codes, so it can't
+    // run unattended — park it for a supervised apply session, which drives it fine.
+    if (ats === "workday") {
+      return {
+        status: "needs_human",
+        reason: "Workday flow — needs a supervised apply session (account + verification steps)",
+        liveViewUrl: session.liveViewUrl,
+      };
+    }
+
     // Unknown/custom/layered sites (Phenom→iCIMS, bespoke portals) have no hardcoded
     // filler — drive them with the AI browser agent, which owns its own submit + handoff.
     if (ats === "unknown" && config.env.agenticFallback) {

@@ -56,6 +56,8 @@ const SourceEntry = z.object({
   queries: z.array(z.string()).default([]),
   /** Brand names for boards whose token/slug isn't the display name. */
   displayNames: z.record(z.string()).optional(),
+  /** Country descriptors to narrow results to, for boards that support it (workday). */
+  countries: z.array(z.string()).optional(),
   notes: z.string().optional(),
 });
 const SourcesSchema = z.object({ sources: z.array(SourceEntry) });
