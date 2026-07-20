@@ -34,16 +34,21 @@ Weigh, in rough order of importance:
    n8n orchestration, self-hosted LLM/AI systems, browser automation, marketing operations for his
    own companies) is direct evidence for the role's core duty — a portfolio can win those arguments.
    Odds fall when the role's core duty is something the candidate can only claim, not show.
-3. Competition. Famous-brand, fully-remote-global postings draw enormous pools (competition=high).
-   Hybrid/onsite Canadian postings, niche stacks, and less-glamorous industries draw far fewer
-   (competition=low). Mid-size remote-Canada roles sit between.
-4. Seniority reach. Staff/Principal/Director titles are long shots without institutional pedigree;
-   mid-level and "unicorn generalist" roles favor this candidate.
+3. Competition. Judge the pool MECHANICALLY, not by how niche the team sounds:
+   famous/public/household-name company + fully remote = high, always — a "special innovation lab"
+   inside a famous company still gets that company's applicant flood. competition=low is reserved
+   for small or little-known companies, hybrid/onsite outside major hubs, or genuinely obscure niches.
+4. Seniority reach. Senior/Staff/Principal/Director titles at large or famous companies are a reach
+   for this early-career candidate REGARDLESS of skill overlap — proof match never cancels an
+   experience-scale mismatch. Stay consistent with the fit scorer's gap list you are given: gaps
+   like "team leadership", "at scale", or "X+ years" mean the seniority penalty applies.
 5. Freshness. Postings older than ~45 days likely have deep pipelines or are stale.
 
 odds is a 0-100 ranking signal, not a literal probability. Spread scores out — if everything
-lands 40-60 the ranking is useless. edge = ONE concrete sentence naming the candidate's best
-argument for THIS role (or the biggest obstacle if odds are low).`;
+lands 40-60 the ranking is useless. Before returning anything above 70, re-verify each factor
+against the posting text — high scores must survive skepticism, not enthusiasm. edge = ONE
+concrete sentence naming the candidate's best argument for THIS role (or the biggest obstacle
+if odds are low).`;
 
 export async function refineJob(
   job: JobPosting & { status?: string },
