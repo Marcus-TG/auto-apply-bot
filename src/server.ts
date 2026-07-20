@@ -185,15 +185,48 @@ app.get("/queue", (req, res) => {
       )
       .join("");
 
-  // Materials-ready rows float to the top so the next review is always in view;
-  // within each band, hire-odds (refinement pass) outranks raw fit.
+  // Queue sort options. Materials-ready rows always float to the top so the next
+  // review stays in view; the chosen sort applies within each band. Jobs the
+  // refinement pass hasn't reached yet fall back to fit so fresh finds stay visible.
+  type QueueRow = {
+    job: ReturnType<typeof jobs.byStatus>[number];
+    score: ReturnType<typeof scores.get>;
+    odds: ReturnType<typeof refinements.get>;
+  };
+  const SORTS: Record<string, { label: string; cmp: (a: QueueRow, b: QueueRow) => number }> = {
+    odds: {
+      label: "Odds",
+      cmp: (a, b) => (b.odds?.odds ?? b.score!.overall) - (a.odds?.odds ?? a.score!.overall),
+    },
+    fit: {
+      label: "Fit",
+      cmp: (a, b) => b.score!.overall - a.score!.overall || (b.odds?.odds ?? 0) - (a.odds?.odds ?? 0),
+    },
+    posted: {
+      label: "Recently posted",
+      cmp: (a, b) =>
+        (b.job.postedAt ?? "").localeCompare(a.job.postedAt ?? "") ||
+        (b.odds?.odds ?? 0) - (a.odds?.odds ?? 0),
+    },
+    found: {
+      label: "Recently found",
+      cmp: (a, b) =>
+        b.job.discoveredAt.localeCompare(a.job.discoveredAt) ||
+        (b.odds?.odds ?? 0) - (a.odds?.odds ?? 0),
+    },
+    company: {
+      label: "Company A-Z",
+      cmp: (a, b) => a.job.company.localeCompare(b.job.company) || (b.odds?.odds ?? 0) - (a.odds?.odds ?? 0),
+    },
+  };
+  const sortKey = SORTS[String(req.query.sort ?? "")] ? String(req.query.sort) : "odds";
   const queueRows = [...jobs.byStatus("scored"), ...jobs.byStatus("awaiting_approval")]
     .map((j) => ({ job: j, score: scores.get(j.id), odds: refinements.get(j.id) }))
-    .filter((r) => r.score)
+    .filter((r): r is QueueRow & { score: NonNullable<QueueRow["score"]> } => !!r.score)
     .sort(
       (a, b) =>
         Number(b.job.status === "awaiting_approval") - Number(a.job.status === "awaiting_approval") ||
-        (b.odds?.odds ?? b.score!.overall ?? 0) - (a.odds?.odds ?? a.score!.overall ?? 0),
+        SORTS[sortKey]!.cmp(a, b),
     );
   // needs_human jobs sit here too: same queue, just applied by hand.
   const approvedRows = [...jobs.byStatus("approved"), ...jobs.byStatus("needs_human")]
@@ -248,17 +281,29 @@ app.get("/queue", (req, res) => {
   } else {
     const filter = String(req.query.f ?? "all");
     const readyCount = queueRows.filter((r) => r.job.status === "awaiting_approval").length;
-    const chipCounts = { all: queueRows.length, ready: readyCount, unprepped: queueRows.length - readyCount };
+    const chipCounts = {
+      all: queueRows.length,
+      ready: readyCount,
+      unprepped: queueRows.length - readyCount,
+      nogate: queueRows.filter((r) => r.odds && !r.odds.degreeGated).length,
+    };
     const chips = (
       [
         ["all", "All"],
         ["ready", "Materials ready"],
         ["unprepped", "Needs prep"],
+        ["nogate", "No degree gate"],
       ] as const
     )
       .map(
         ([f, label]) =>
-          `<a class="chip${f === filter ? " active" : ""}" href="${baseUrl()}/queue?f=${f}">${label} (${chipCounts[f]})</a>`,
+          `<a class="chip${f === filter ? " active" : ""}" href="${baseUrl()}/queue?f=${f}&sort=${sortKey}">${label} (${chipCounts[f]})</a>`,
+      )
+      .join("");
+    const sortChips = Object.entries(SORTS)
+      .map(
+        ([key, s]) =>
+          `<a class="chip${key === sortKey ? " active" : ""}" href="${baseUrl()}/queue?f=${filter}&sort=${key}">${s.label}</a>`,
       )
       .join("");
     const shownRows =
@@ -266,7 +311,9 @@ app.get("/queue", (req, res) => {
         ? queueRows.filter((r) => r.job.status === "awaiting_approval")
         : filter === "unprepped"
           ? queueRows.filter((r) => r.job.status !== "awaiting_approval")
-          : queueRows;
+          : filter === "nogate"
+            ? queueRows.filter((r) => r.odds && !r.odds.degreeGated)
+            : queueRows;
     body = shownRows
       .map(({ job, score, odds }) => {
         const ready = job.status === "awaiting_approval";
@@ -292,6 +339,7 @@ app.get("/queue", (req, res) => {
       })
       .join("");
     body = `<div class="chips">${chips}</div>
+      <div class="chips"><span class="muted" style="margin-right:4px">Sort:</span>${sortChips}</div>
       <table><tr><th title="hire-odds rank from the refinement pass">Odds</th><th>Fit</th><th>Company</th><th>Role</th><th>Location</th><th>Status</th><th></th></tr>${body}</table>`;
   }
 
