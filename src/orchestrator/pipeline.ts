@@ -129,7 +129,9 @@ export async function tailorOneJob(
     await notifyN8n(card);
     return { jobId, lane: "review" };
   } catch (err) {
-    jobs.setStatus(jobId, "failed");
+    // Back to `scored`, not `failed`: a failed tailor is retryable and the job
+    // should stay visible on the queue board instead of silently vanishing.
+    jobs.setStatus(jobId, "scored");
     events.log({ jobId, kind: "tailor_error", data: { error: String(err) } });
     return { jobId, error: String(err) };
   }
