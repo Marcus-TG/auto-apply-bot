@@ -395,13 +395,13 @@ app.get("/reply-sweep/query", requireSecret, (req, res) => {
   res.json({ query: buildSweepQuery(days) });
 });
 
-app.post("/reply-sweep", requireSecret, (req, res) => {
+app.post("/reply-sweep", requireSecret, async (req, res) => {
   const { messages } = req.body as { messages?: SweepMessage[] };
   if (!Array.isArray(messages)) {
     res.status(400).json({ error: "messages array required" });
     return;
   }
-  res.json(processSweep(messages));
+  res.json(await processSweep(messages));
 });
 
 // Applications ledger: every submitted application, newest first.
