@@ -27,6 +27,7 @@ import {
   runPipeline,
 } from "./orchestrator/pipeline.js";
 import { resolveApproval, sweepExpiredApprovals } from "./approval/index.js";
+import { buildSweepQuery, processSweep, type SweepMessage } from "./followups/sweep.js";
 
 initSchema();
 const app = express();
@@ -385,6 +386,22 @@ app.post("/verify-code", requireSecret, (req, res) => {
     JSON.stringify({ code, subject: subject ?? null, at: new Date().toISOString() }) + "\n",
   );
   res.json({ ok: true });
+});
+
+// Inbound-reply sweep (the n8n "reply sweep" workflow drives both endpoints
+// daily: GET the Gmail query, search the inbox, POST the messages back).
+app.get("/reply-sweep/query", requireSecret, (req, res) => {
+  const days = Math.min(Math.max(Number(req.query.days) || 2, 1), 30);
+  res.json({ query: buildSweepQuery(days) });
+});
+
+app.post("/reply-sweep", requireSecret, (req, res) => {
+  const { messages } = req.body as { messages?: SweepMessage[] };
+  if (!Array.isArray(messages)) {
+    res.status(400).json({ error: "messages array required" });
+    return;
+  }
+  res.json(processSweep(messages));
 });
 
 // Applications ledger: every submitted application, newest first.
