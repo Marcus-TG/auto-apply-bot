@@ -12,6 +12,8 @@ import { initSchema } from "./store/db.js";
 import {
   discover,
   scoreNewJobs,
+  scrub,
+  refine,
   tailorScoredJobs,
   submitApproved,
   runPipeline,
@@ -33,6 +35,12 @@ async function main() {
     case "score":
       console.log(JSON.stringify(await scoreNewJobs(), null, 2));
       break;
+    case "scrub":
+      console.log(JSON.stringify(await scrub(), null, 2));
+      break;
+    case "refine":
+      console.log(JSON.stringify(await refine(), null, 2));
+      break;
     case "tailor":
       console.log(JSON.stringify(await tailorScoredJobs(baseUrl), null, 2));
       break;
@@ -46,7 +54,7 @@ async function main() {
       console.log(JSON.stringify(await runPipeline(baseUrl), null, 2));
       break;
     default:
-      console.log("commands: db:init | discover | score | tailor | submit | sweep | run");
+      console.log("commands: db:init | discover | score | scrub | refine | tailor | submit | sweep | run");
   }
 }
 

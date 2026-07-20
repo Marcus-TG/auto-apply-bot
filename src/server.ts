@@ -12,7 +12,7 @@ import { resolve } from "node:path";
 import express from "express";
 import { config } from "./config/index.js";
 import { initSchema } from "./store/db.js";
-import { jobs, scores, applications, approvals, submissions, events, followups } from "./store/repositories.js";
+import { jobs, scores, refinements, applications, approvals, submissions, events, followups } from "./store/repositories.js";
 import { loadVariants, getVariant } from "./resume/selector.js";
 import { tailorResume } from "./resume/tailor.js";
 import { renderResumePdf, resumeIdentityFromProfile } from "./resume/render.js";
@@ -21,6 +21,8 @@ import { reviseCoverLetter } from "./coverletter/generator.js";
 import {
   discover,
   scoreNewJobs,
+  scrub,
+  refine,
   tailorScoredJobs,
   tailorOneJob,
   submitApproved,
@@ -53,6 +55,8 @@ app.post("/run/tailor", requireSecret, async (_req, res) => res.json(await tailo
 app.post("/run/submit", requireSecret, async (_req, res) => res.json(await submitApproved()));
 app.post("/run/all", requireSecret, async (_req, res) => res.json(await runPipeline(baseUrl())));
 app.post("/run/sweep", requireSecret, (_req, res) => res.json({ expired: sweepExpiredApprovals() }));
+app.post("/run/scrub", requireSecret, async (_req, res) => res.json(await scrub()));
+app.post("/run/refine", requireSecret, async (_req, res) => res.json(await refine()));
 
 // --- human review surface (job ids are content hashes; server is LAN-only) ---
 const ARTIFACT_FILES = new Set(["resume.pdf", "cover-letter.txt", "resume.json"]);
@@ -181,14 +185,15 @@ app.get("/queue", (req, res) => {
       )
       .join("");
 
-  // Materials-ready rows float to the top so the next review is always in view.
+  // Materials-ready rows float to the top so the next review is always in view;
+  // within each band, hire-odds (refinement pass) outranks raw fit.
   const queueRows = [...jobs.byStatus("scored"), ...jobs.byStatus("awaiting_approval")]
-    .map((j) => ({ job: j, score: scores.get(j.id) }))
+    .map((j) => ({ job: j, score: scores.get(j.id), odds: refinements.get(j.id) }))
     .filter((r) => r.score)
     .sort(
       (a, b) =>
         Number(b.job.status === "awaiting_approval") - Number(a.job.status === "awaiting_approval") ||
-        (b.score!.overall ?? 0) - (a.score!.overall ?? 0),
+        (b.odds?.odds ?? b.score!.overall ?? 0) - (a.odds?.odds ?? a.score!.overall ?? 0),
     );
   // needs_human jobs sit here too: same queue, just applied by hand.
   const approvedRows = [...jobs.byStatus("approved"), ...jobs.byStatus("needs_human")]
@@ -263,16 +268,23 @@ app.get("/queue", (req, res) => {
           ? queueRows.filter((r) => r.job.status !== "awaiting_approval")
           : queueRows;
     body = shownRows
-      .map(({ job, score }) => {
+      .map(({ job, score, odds }) => {
         const ready = job.status === "awaiting_approval";
         const action = ready
           ? `<a class="btn go" href="${baseUrl()}/review/${job.id}">Review & decide</a>`
           : `<a class="btn go" href="${baseUrl()}/tailor-one/${job.id}">Prepare materials</a>
              <a class="btn no" href="${baseUrl()}/reject-job/${job.id}">Skip</a>`;
+        const oddsCell = odds
+          ? `<span class="pill ${odds.odds >= 65 ? "ok" : odds.odds >= 40 ? "wait" : "low"}" title="${esc(odds.reason)}">${odds.odds}</span>${
+              odds.degreeGated ? ' <span class="pill low" title="hard degree requirement">🎓</span>' : ""
+            }`
+          : `<span class="muted">—</span>`;
+        const edgeLine = odds ? `<div class="muted edge">${esc(odds.edge)}</div>` : "";
         return `<tr${ready ? ' class="ready"' : ""}>
+        <td>${oddsCell}</td>
         <td><b>${score!.overall}</b></td>
         <td>${esc(job.company)}</td>
-        <td><a href="${esc(job.url)}">${esc(job.title.trim())}</a></td>
+        <td><a href="${esc(job.url)}">${esc(job.title.trim())}</a>${edgeLine}</td>
         <td>${esc(job.location ?? "")}</td>
         <td><span class="pill ${ready ? "ok" : "wait"}">${ready ? "materials ready" : "needs prep"}</span></td>
         <td>${action}</td>
@@ -280,7 +292,7 @@ app.get("/queue", (req, res) => {
       })
       .join("");
     body = `<div class="chips">${chips}</div>
-      <table><tr><th>Fit</th><th>Company</th><th>Role</th><th>Location</th><th>Status</th><th></th></tr>${body}</table>`;
+      <table><tr><th title="hire-odds rank from the refinement pass">Odds</th><th>Fit</th><th>Company</th><th>Role</th><th>Location</th><th>Status</th><th></th></tr>${body}</table>`;
   }
 
   res.send(`<!doctype html><html><head><meta charset="utf-8">
@@ -297,7 +309,8 @@ app.get("/queue", (req, res) => {
   .tab.active{background:#fff;color:#1c1917;box-shadow:0 -1px 3px rgba(0,0,0,.06)}
   .muted{color:#78716c;font-size:.85rem}
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.75rem;font-weight:600;white-space:nowrap}
-  .pill.ok{background:#dcfce7;color:#166534} .pill.wait{background:#e7e5e4;color:#78716c}
+  .pill.ok{background:#dcfce7;color:#166534} .pill.wait{background:#e7e5e4;color:#78716c} .pill.low{background:#fee2e2;color:#991b1b}
+  .edge{font-size:.78rem;max-width:420px}
   tr.ready td{background:#f0fdf4}
   .chips{margin:10px 0}
   .chip{display:inline-block;padding:4px 12px;border-radius:999px;text-decoration:none;font-size:.8rem;font-weight:600;color:#44403c;background:#e7e5e4;margin-right:6px}

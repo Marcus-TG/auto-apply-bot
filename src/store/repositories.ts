@@ -137,6 +137,55 @@ export const scores = {
   },
 };
 
+// ---------- refinements ----------
+export interface Refinement {
+  jobId: string;
+  odds: number;
+  edge: string;
+  degreeGated: boolean;
+  competition: "low" | "medium" | "high";
+  reason: string;
+  model: string;
+  refinedAt: string;
+}
+
+export const refinements = {
+  save(r: Refinement): void {
+    db()
+      .prepare(
+        `INSERT OR REPLACE INTO refinements
+          (job_id, odds, edge, degree_gated, competition, reason, model, refined_at)
+         VALUES (@jobId,@odds,@edge,@degreeGated,@competition,@reason,@model,@refinedAt)`,
+      )
+      .run({
+        jobId: r.jobId,
+        odds: r.odds,
+        edge: r.edge,
+        degreeGated: r.degreeGated ? 1 : 0,
+        competition: r.competition,
+        reason: r.reason,
+        model: r.model,
+        refinedAt: r.refinedAt,
+      });
+  },
+  get(jobId: string): Refinement | undefined {
+    const r = db().prepare(`SELECT * FROM refinements WHERE job_id=?`).get(jobId) as
+      | Record<string, unknown>
+      | undefined;
+    if (!r) return undefined;
+    return {
+      jobId: r.job_id as string,
+      odds: r.odds as number,
+      edge: r.edge as string,
+      degreeGated: Boolean(r.degree_gated),
+      competition: r.competition as Refinement["competition"],
+      reason: r.reason as string,
+      model: r.model as string,
+      refinedAt: r.refined_at as string,
+    };
+  },
+};
+
 // ---------- applications ----------
 export const applications = {
   save(app: TailoredApplication): void {

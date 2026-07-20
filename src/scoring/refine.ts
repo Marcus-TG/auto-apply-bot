@@ -1,0 +1,129 @@
+/**
+ * Refinement pass: re-rank the human review queue by realistic odds of getting
+ * HIRED, which is a different question than fit. The fit scorer asks "could the
+ * candidate do this job?"; this pass asks "of the jobs that cleared that bar,
+ * which applications are most likely to convert?" — hard requirement gates the
+ * candidate can't argue past, how crowded the applicant pool looks, how stale
+ * the posting is, and whether the candidate's shipped work is direct proof for
+ * this exact role. Runs once per job on the local model; the queue board sorts
+ * by the result.
+ */
+import { z } from "zod";
+import { config } from "../config/index.js";
+import { callStructured } from "../llm/client.js";
+import { jobs, scores, refinements, events, type Refinement } from "../store/repositories.js";
+import type { JobPosting } from "../types/index.js";
+
+const RefineOutput = z.object({
+  odds: z.number().min(0).max(100),
+  edge: z.string(),
+  degreeGated: z.boolean(),
+  competition: z.enum(["low", "medium", "high"]),
+  reason: z.string(),
+});
+
+const SYSTEM = `You estimate a specific candidate's realistic odds of being HIRED for postings
+that already passed a fit screen. Fit is necessary but not sufficient — rank by conversion odds.
+
+Weigh, in rough order of importance:
+1. Hard gates. A degree/certification requirement stated as mandatory with no "or equivalent
+   experience" language is a major penalty for this candidate (self-taught, no degree, strong
+   shipped-work portfolio). Set degreeGated=true ONLY for such hard requirements; "preferred"
+   or "or equivalent" language is not a gate. Same logic for clearances, licenses, must-be-located-in.
+2. Proof match. Odds rise sharply when the candidate's concrete shipped work (workflow automation,
+   n8n orchestration, self-hosted LLM/AI systems, browser automation, marketing operations for his
+   own companies) is direct evidence for the role's core duty — a portfolio can win those arguments.
+   Odds fall when the role's core duty is something the candidate can only claim, not show.
+3. Competition. Famous-brand, fully-remote-global postings draw enormous pools (competition=high).
+   Hybrid/onsite Canadian postings, niche stacks, and less-glamorous industries draw far fewer
+   (competition=low). Mid-size remote-Canada roles sit between.
+4. Seniority reach. Staff/Principal/Director titles are long shots without institutional pedigree;
+   mid-level and "unicorn generalist" roles favor this candidate.
+5. Freshness. Postings older than ~45 days likely have deep pipelines or are stale.
+
+odds is a 0-100 ranking signal, not a literal probability. Spread scores out — if everything
+lands 40-60 the ranking is useless. edge = ONE concrete sentence naming the candidate's best
+argument for THIS role (or the biggest obstacle if odds are low).`;
+
+export async function refineJob(
+  job: JobPosting & { status?: string },
+  profile: unknown,
+): Promise<Refinement> {
+  const score = scores.get(job.id);
+  const ageDays = job.postedAt
+    ? Math.max(0, Math.round((Date.now() - Date.parse(job.postedAt)) / 86_400_000))
+    : null;
+
+  const out = await callStructured({
+    model: config.env.modelPrefilter,
+    system: SYSTEM,
+    cachedContext: [{ label: "Candidate profile", text: JSON.stringify(profile, null, 2) }],
+    userPrompt: `Company: ${job.company}
+Title: ${job.title}
+Location: ${job.location ?? "n/a"} (${job.remote})
+Posting age: ${ageDays === null ? "unknown" : `${ageDays} days`}
+Fit score: ${score ? `${score.overall}/100 — ${score.summary}` : "n/a"}
+Matched keywords: ${score?.matchedKeywords.join(", ") || "n/a"}
+Gap keywords: ${score?.gapKeywords.join(", ") || "n/a"}
+Description:
+${job.description.slice(0, 6000)}`,
+    tool: {
+      name: "record_hire_odds",
+      description: "Record the hire-odds assessment for this posting.",
+      schema: RefineOutput,
+    },
+    maxTokens: 600,
+  });
+
+  const refinement: Refinement = {
+    jobId: job.id,
+    odds: Math.round(out.odds),
+    edge: out.edge,
+    degreeGated: out.degreeGated,
+    competition: out.competition,
+    reason: out.reason,
+    model: config.env.modelPrefilter,
+    refinedAt: new Date().toISOString(),
+  };
+  refinements.save(refinement);
+  events.log({
+    jobId: job.id,
+    kind: "refined",
+    data: { odds: refinement.odds, competition: out.competition, degreeGated: out.degreeGated },
+  });
+  return refinement;
+}
+
+/** Refine every queued job that doesn't have a refinement yet (or was re-scored since). */
+export async function refineQueuedJobs(profile: unknown): Promise<{
+  refined: number;
+  skipped: number;
+  errors: number;
+}> {
+  const queued = [...jobs.byStatus("scored"), ...jobs.byStatus("awaiting_approval")];
+  const pending = queued.filter((j) => {
+    const r = refinements.get(j.id);
+    if (!r) return true;
+    const s = scores.get(j.id);
+    return !!s && s.scoredAt > r.refinedAt; // re-scored since last refinement
+  });
+
+  let refined = 0;
+  let errors = 0;
+  const concurrency = Math.max(1, Number(process.env.REFINE_CONCURRENCY ?? 2));
+  let next = 0;
+  async function worker() {
+    while (next < pending.length) {
+      const job = pending[next++]!;
+      try {
+        await refineJob(job, profile);
+        refined++;
+      } catch (err) {
+        errors++;
+        events.log({ jobId: job.id, kind: "refine_error", data: { error: String(err) } });
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, pending.length) }, worker));
+  return { refined, skipped: queued.length - pending.length, errors };
+}

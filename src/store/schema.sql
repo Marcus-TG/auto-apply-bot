@@ -83,3 +83,16 @@ CREATE TABLE IF NOT EXISTS followups (
   note        TEXT,
   updated_at  TEXT NOT NULL
 );
+
+-- Hire-odds refinement: a second LLM pass over queued jobs that ranks them by
+-- realistic odds of getting HIRED (fit is necessary, not sufficient).
+CREATE TABLE IF NOT EXISTS refinements (
+  job_id       TEXT PRIMARY KEY REFERENCES jobs(id),
+  odds         REAL NOT NULL,                  -- 0-100 rank, not a literal probability
+  edge         TEXT NOT NULL,                  -- one sentence: where this candidate wins
+  degree_gated INTEGER NOT NULL DEFAULT 0,     -- hard degree requirement, no equivalent-experience out
+  competition  TEXT NOT NULL,                  -- low | medium | high
+  reason       TEXT NOT NULL,
+  model        TEXT NOT NULL,
+  refined_at   TEXT NOT NULL
+);

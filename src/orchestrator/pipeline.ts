@@ -18,6 +18,8 @@ import { generateCoverLetter } from "../coverletter/generator.js";
 import { requestApproval } from "../approval/index.js";
 import { notifyN8n } from "../approval/notify.js";
 import { submitApplication, buildApplicantFields } from "../apply/index.js";
+import { refineQueuedJobs } from "../scoring/refine.js";
+import { scrubQueue } from "./scrub.js";
 import type { TailoredApplication } from "../types/index.js";
 
 // Returns `any` because the profile JSON is user-authored and consumed by several
@@ -133,6 +135,16 @@ export async function tailorOneJob(
   }
 }
 
+/** Stage 2b: drop queued jobs whose postings have closed. */
+export async function scrub() {
+  return scrubQueue();
+}
+
+/** Stage 2c: hire-odds refinement over the review queue (see scoring/refine.ts). */
+export async function refine() {
+  return refineQueuedJobs(loadProfile());
+}
+
 /** Stage 3: tailor materials for scored jobs that are in an apply/review lane. */
 export async function tailorScoredJobs(baseUrl: string) {
   const out: { jobId: string; lane: string }[] = [];
@@ -173,7 +185,9 @@ export async function submitApproved() {
 export async function runPipeline(baseUrl: string) {
   const discovered = await discover();
   const scoredResults = await scoreNewJobs();
+  const scrubbed = await scrub(); // after scoring so fresh jobs aren't wasted on dead postings
+  const refined = await refine();
   const tailored = await tailorScoredJobs(baseUrl);
   const submitted = await submitApproved(); // submits auto-lane + any already-approved
-  return { discovered, scored: scoredResults.length, tailored: tailored.length, submitted };
+  return { discovered, scored: scoredResults.length, scrubbed, refined, tailored: tailored.length, submitted };
 }
