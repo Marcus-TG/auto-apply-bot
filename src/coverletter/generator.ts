@@ -25,6 +25,12 @@ Rules:
 - Never state durations, dates, or metrics (e.g. "six years at X") unless they
   appear verbatim in the provided content.
 - Reference something concrete about THIS role/company from the job description.
+- Quote the posting ONLY if the line is something only this company would say: a
+  named methodology, how they staff or run projects, a specific product or claim.
+  Never quote generic mission-statement filler ("bridge the gap", "drive impact",
+  "fast-paced environment"); quoting a cliché back reads as automated flattery.
+  When no distinctive line exists, don't quote at all: open with the candidate's
+  strongest fit claim tied to a concrete fact about how this company operates.
 - Match the candidate's voice sample. No buzzwords, no "I am passionate about", no
   generic filler. Prefer concrete outcomes over adjectives.
 - Never use em dashes or en dashes; use commas, colons, or separate sentences.
@@ -105,6 +111,9 @@ ${job.description.slice(0, 4000)}`,
       system:
         "Revise the cover letter to remove any buzzwords, clichés, or generic claims, " +
         "keep only concrete points grounded in the resume, and preserve the candidate's voice. " +
+        "If the opening quotes a generic line from the job posting (mission-statement filler " +
+        "any company could have written), replace that opening with the letter's strongest " +
+        "concrete fit claim; keep a quote only if it is distinctive to this company. " +
         "Never use em dashes or en dashes; use commas, colons, or separate sentences. " +
         "Return only the revised letter.",
       userPrompt: draft,
