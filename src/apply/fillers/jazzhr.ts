@@ -9,6 +9,7 @@ import type { Page } from "playwright";
 import type { ApplicantFields } from "../field-map.js";
 import { answerFor } from "../field-map.js";
 import type { FillOutcome } from "./generic.js";
+import { findOption } from "./generic.js";
 import { dismissCookieBanner } from "./workable.js";
 
 export const JAZZHR_SUBMIT =
@@ -88,9 +89,7 @@ export async function fillJazzHR(
       continue;
     }
     const options = await el.locator("option").allInnerTexts();
-    const match =
-      options.find((o) => o.trim().toLowerCase() === value.toLowerCase()) ??
-      options.find((o) => o.toLowerCase().includes(value.toLowerCase()));
+    const match = findOption(options, value);
     if (!match) {
       unresolved.push(`${label} (no option matching "${value}")`);
       continue;

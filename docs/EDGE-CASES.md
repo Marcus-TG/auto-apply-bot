@@ -22,3 +22,11 @@
 Anything parked in `needs_human` is surfaced for you to finish by hand (open the
 live-view URL from the event log, or the apply URL). These are deliberate stops, not
 failures — the system chooses to ask rather than risk a bad submission.
+
+## Company sites that embed Greenhouse in an iframe (Samsara)
+
+Some careers pages host the Greenhouse form inside an iframe the fillers can't
+reach; the walker then sees zero required fields and reports a vacuously clean
+fill (now guarded: a page with no resume file input fails loudly). Fix is to
+point `apply_url` at the standalone embed form:
+`https://job-boards.greenhouse.io/embed/job_app?for=<org>&token=<gh_jid>`.

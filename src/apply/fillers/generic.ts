@@ -13,21 +13,41 @@ export interface FillOutcome {
   unresolved: string[]; // labels we couldn't answer (→ needs_human)
 }
 
+/** Match an answer against option labels: exact, then whole-word, then
+ *  substring only for values long enough not to land inside an unrelated
+ *  option ("ON" must never match "ArizONa"). */
+export function findOption(options: string[], value: string): string | undefined {
+  const v = value.trim().toLowerCase();
+  const exact = options.find((o) => o.trim().toLowerCase() === v);
+  if (exact) return exact;
+  const escaped = v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const word = options.find((o) => new RegExp(`\\b${escaped}\\b`, "i").test(o));
+  if (word) return word;
+  return v.length >= 4 ? options.find((o) => o.toLowerCase().includes(v)) : undefined;
+}
+
 export async function fillGeneric(
   page: Page,
   fields: ApplicantFields,
   resumePath: string,
+  resumeAttached = false,
 ): Promise<FillOutcome> {
   const unresolved: string[] = [];
 
-  // File upload (resume) — try common selectors.
+  // File upload (resume) — try common selectors. A page with no file input at
+  // all is almost certainly not the real form (iframe-embedded ATS, landing
+  // page): report it rather than returning a vacuously "clean" fill. Some
+  // boards remove the input once a file is attached, so an ATS-specific filler
+  // that already attached the resume passes resumeAttached to skip the check.
   const fileInput = page.locator('input[type="file"]').first();
   if (await fileInput.count()) {
     try {
       await fileInput.setInputFiles(resumePath);
     } catch {
-      unresolved.push("resume upload");
+      if (!resumeAttached) unresolved.push("resume upload");
     }
+  } else if (!resumeAttached) {
+    unresolved.push("resume upload (no file input found — is the form on this page?)");
   }
 
   // Text inputs: use the associated label to decide what to type.
@@ -54,8 +74,22 @@ export async function fillGeneric(
     // match via keyboard selection; plain inputs ignore the extra keys.
     if ((await el.getAttribute("role")) === "combobox" || (await el.getAttribute("aria-autocomplete"))) {
       await page.waitForTimeout(400);
+      // The menu only opens on a keypress, and its first filtered suggestion
+      // isn't necessarily the right one ("Man" filters to "Cis-man" first):
+      // open with ArrowDown, then click the exact-text option when one is
+      // visible, falling back to committing the highlighted suggestion.
       await el.press("ArrowDown").catch(() => {});
-      await el.press("Enter").catch(() => {});
+      await page.waitForTimeout(300);
+      const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const exact = page
+        .locator('.select__option:visible, [role="option"]:visible')
+        .filter({ hasText: new RegExp(`^\\s*${escaped}\\s*$`) })
+        .first();
+      if (await exact.count()) {
+        await exact.click().catch(() => {});
+      } else {
+        await el.press("Enter").catch(() => {});
+      }
     }
     await humanPause();
   }
@@ -77,8 +111,7 @@ export async function fillGeneric(
       continue;
     }
     const options: string[] = await el.locator("option").allInnerTexts();
-    const match = options.find((o) => o.trim().toLowerCase() === value.toLowerCase())
-      ?? options.find((o) => o.toLowerCase().includes(value.toLowerCase()));
+    const match = findOption(options, value);
     if (!match) {
       if (required) unresolved.push(`${label} (no option matching "${value}")`);
       continue;

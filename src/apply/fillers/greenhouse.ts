@@ -22,8 +22,11 @@ export async function fillGreenhouse(
   await set("#email", fields.email);
   await set("#phone", fields.phone);
 
+  let resumeAttached = false;
   const resume = page.locator('input[type="file"]#resume, input[type="file"]').first();
-  if (await resume.count()) await resume.setInputFiles(resumePath).catch(() => {});
+  if (await resume.count()) {
+    await resume.setInputFiles(resumePath).then(() => { resumeAttached = true; }).catch(() => {});
+  }
 
   // Cover letter: attach the file when the board offers an upload; otherwise
   // use the paste-in textarea (hidden behind an "enter manually" toggle on
@@ -62,7 +65,7 @@ export async function fillGreenhouse(
 
   // Let the generic walker handle any remaining required custom questions and
   // report anything it can't answer for the human.
-  return fillGeneric(page, fields, resumePath);
+  return fillGeneric(page, fields, resumePath, resumeAttached);
 }
 
 export const GREENHOUSE_SUBMIT = 'button[type="submit"], input[type="submit"], #submit_app';

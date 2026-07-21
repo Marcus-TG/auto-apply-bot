@@ -72,6 +72,19 @@ export function buildFields(profile: Profile): ApplicantFields {
  * Given a required-field label we don't recognise, decide if we can answer it.
  * Returns the answer string, or null meaning "pause for human".
  */
+/** Province/state dropdowns list full names; a two-letter code like "ON" would
+ *  otherwise substring-match the wrong option ("ON" → "ArizONa"). */
+const REGION_NAMES: Record<string, string> = {
+  AB: "Alberta", BC: "British Columbia", MB: "Manitoba", NB: "New Brunswick",
+  NL: "Newfoundland and Labrador", NS: "Nova Scotia", NT: "Northwest Territories",
+  NU: "Nunavut", ON: "Ontario", PE: "Prince Edward Island", QC: "Quebec",
+  SK: "Saskatchewan", YT: "Yukon",
+};
+function expandRegionCode(region: string | undefined): string | undefined {
+  if (!region) return region;
+  return REGION_NAMES[region.trim().toUpperCase()] ?? region;
+}
+
 export function answerFor(label: string, fields: ApplicantFields): string | null {
   const l = label.toLowerCase();
   const country = fields.country.toLowerCase();
@@ -92,6 +105,12 @@ export function answerFor(label: string, fields: ApplicantFields): string | null
   // Work authorization / sponsorship. Only answer when we can do so truthfully:
   // sponsorship questions get a direct answer; "authorized/located in X" only
   // when X is the candidate's own country — anything else stays with the human.
+  // Positive phrasing ("do you have the legal right / are you authorized to
+  // work ... without sponsorship?") must be checked before the bare /sponsor/
+  // rule: the word "sponsorship" inside it would otherwise invert the answer.
+  if (/(legal(ly)?\s*right|right to work|authori[sz]ed to work|eligible to work)/.test(l)) {
+    return fields.requiresSponsorship ? "No" : "Yes";
+  }
   if (/sponsor/.test(l)) return fields.requiresSponsorship ? "Yes" : "No";
   if (country && new RegExp(`(authori[sz](ed|ation)|legal(ly)? .*work|located|resid|living|relocat).*${country}`).test(l)) {
     return "Yes";
@@ -110,7 +129,7 @@ export function answerFor(label: string, fields: ApplicantFields): string | null
   // answered when the profile carries a street address — never derived.
   if (/address (line )?1|street address|^address\b/.test(l)) return fields.address?.street ?? null;
   if (/postal|zip/.test(l)) return fields.address?.postal ?? null;
-  if (/province|\bstate\b/.test(l)) return fields.address?.region ?? null;
+  if (/province|\bstate\b/.test(l)) return expandRegionCode(fields.address?.region) ?? null;
 
   // Word-bounded: a bare /city/ also matches "ethni-city" and leaks the
   // candidate's location into EEO demographic selects.
