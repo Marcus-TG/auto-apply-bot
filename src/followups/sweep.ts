@@ -82,7 +82,9 @@ export function buildSweepQuery(days = 2): string {
 // Never surface these: operational mail that isn't a reply about a candidacy.
 const NOISE =
   /security code|verification code|verify your email|receipt from|invoice|payment|billing|unsubscribe from|password reset|reset your password/i;
-// Application-received autoresponders; already tracked at submit time.
+// Application-received autoresponders; already tracked at submit time. Only a
+// heuristic-fallback signal — rejections often open with the same "thank you
+// for applying" phrasing, so this must never pre-drop a message from the model.
 const CONFIRMATION =
   /(received|got) your application|application (was|has been|is) (submitted|received|in)|thank(s| you) for (applying|your application|submitting)|successfully received your application|confirmation of application/i;
 
@@ -96,11 +98,12 @@ const SCREENING =
 type Classification = "rejected" | "offer" | "interview" | "screening" | "update";
 type LlmClassification = Classification | "confirmation" | "unrelated";
 
-function classifyHeuristic(text: string): Classification {
+function classifyHeuristic(text: string): LlmClassification {
   if (REJECTED.test(text)) return "rejected";
   if (OFFER.test(text)) return "offer";
   if (INTERVIEW.test(text)) return "interview";
   if (SCREENING.test(text)) return "screening";
+  if (CONFIRMATION.test(text)) return "confirmation";
   return "update";
 }
 
@@ -206,7 +209,7 @@ export async function processSweep(messages: SweepMessage[]): Promise<{
     const messageId = m.id ?? "";
 
     if (messageId && alreadyProcessed(messageId)) continue;
-    if (NOISE.test(text) || CONFIRMATION.test(text)) continue;
+    if (NOISE.test(text)) continue;
 
     const job = matchJob(sender, subject, candidates);
     if (!job) continue;

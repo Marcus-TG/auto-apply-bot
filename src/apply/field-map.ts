@@ -23,6 +23,9 @@ export interface ApplicantFields {
   // Per-job, human-approved answers (e.g. essay questions): first label
   // substring match wins, checked before every generic rule.
   custom?: { match: string; value: string }[];
+  // EEO self-identification values the user chose to store (profile.eeo);
+  // absent keys stay in `unknown` so the bot asks instead of guessing.
+  eeo: Record<string, string>;
   // Fields we deliberately leave for the human (null in profile → ask):
   unknown: string[];
 }
@@ -63,6 +66,9 @@ export function buildFields(profile: Profile): ApplicantFields {
     github: profile.identity.links.github ?? undefined,
     answers: Object.fromEntries(
       Object.entries(profile.commonAnswers).map(([k, v]) => [k, String(v)]),
+    ),
+    eeo: Object.fromEntries(
+      Object.entries(profile.eeo).filter(([k, v]) => k !== "note" && v != null).map(([k, v]) => [k, String(v)]),
     ),
     unknown,
   };
@@ -135,6 +141,19 @@ export function answerFor(label: string, fields: ApplicantFields): string | null
   // candidate's location into EEO demographic selects.
   if (/\bcity\b/.test(l)) return fields.address?.city ?? fields.location;
   if (/\blocation\b/.test(l)) return fields.location;
+  // EEO self-identification: answered only from values the user explicitly
+  // stored in profile.eeo. Values are phrased for word-boundary option
+  // matching, so an ATS whose option list phrases things differently falls
+  // back to unresolved (ask the human) rather than picking a wrong option.
+  if (/gender identit|which gender/.test(l)) return fields.eeo.gender ?? null;
+  // Word-bounded: a bare /race/ also matches "embrace" ("we embrace
+  // automation…") and leaks the EEO race value into consent questions.
+  if (/\brace\b|ethnicit/.test(l)) return fields.eeo.race ?? null;
+  // Self-identification phrasing only: text inputs get answerFor values typed
+  // in verbatim, so a broad /disability/ would paste the self-ID sentence into
+  // accommodation-request textareas ("describe any disability-related needs").
+  if (/protected veteran|veteran status/.test(l)) return fields.eeo.veteranStatus ?? null;
+  if (/disability status|have a disability/.test(l)) return fields.eeo.disabilityStatus ?? null;
   if (/notice period/.test(l)) return fields.answers.noticePeriod ?? null;
   if (/how did you hear/.test(l)) return fields.answers.howDidYouHear ?? null;
   if (/salary|compensation expectation/.test(l)) return fields.answers.desiredSalary ?? null;
