@@ -114,7 +114,8 @@ export const workdayAdapter: SourceAdapter = {
           if (!page) break;
           const batch = page.jobPostings ?? [];
           for (const p of batch) {
-            if (p.externalPath && !found.has(p.externalPath)) found.set(p.externalPath, p);
+            // Some tenants return stub rows without a title; they'd crash makeJobId.
+            if (p.externalPath && p.title && !found.has(p.externalPath)) found.set(p.externalPath, p);
           }
           if (batch.length < PAGE_SIZE) break;
         }
