@@ -261,15 +261,23 @@ app.get("/queue", (req, res) => {
       application; use <b>Mark sent</b> after you submit one yourself.</p>
       <table><tr><th>Fit</th><th>Company</th><th>Role</th><th>Location</th><th></th></tr>${body}</table>`;
   } else if (tab === "sent") {
-    body = sentRows
-      .map(({ sub, job, followup }) => {
-        const options = FOLLOWUP_STATUSES.map(
-          (s) => `<option value="${s}"${(followup?.status ?? "applied") === s ? " selected" : ""}>${s.replace("_", " ")}</option>`,
-        ).join("");
-        return `<tr>
+    // Rejections sink below a divider so the live pipeline stays on top;
+    // every row gets a colored status pill so screening/interview pop too.
+    const PILL_CLASS: Record<string, string> = {
+      applied: "wait", no_response: "wait", screening: "info", interview: "ok", offer: "ok", rejected: "low",
+    };
+    const active = sentRows.filter((r) => (r.followup?.status ?? "applied") !== "rejected");
+    const dead = sentRows.filter((r) => (r.followup?.status ?? "applied") === "rejected");
+    const row = ({ sub, job, followup }: (typeof sentRows)[number]) => {
+      const status = followup?.status ?? "applied";
+      const options = FOLLOWUP_STATUSES.map(
+        (s) => `<option value="${s}"${status === s ? " selected" : ""}>${s.replace("_", " ")}</option>`,
+      ).join("");
+      return `<tr${status === "rejected" ? ' class="dead"' : ""}>
         <td>${esc(sub.submitted_at.slice(0, 10))}</td>
         <td>${esc(job?.company ?? "?")}</td>
         <td><a href="${esc(job?.url ?? "#")}">${esc(job?.title?.trim() ?? sub.job_id)}</a></td>
+        <td><span class="pill ${PILL_CLASS[status] ?? "wait"}">${esc(status.replace("_", " "))}</span></td>
         <td><a href="${baseUrl()}/review/${sub.job_id}">materials</a></td>
         <td><form method="POST" action="${baseUrl()}/followup/${sub.job_id}" class="inline">
           <select name="status">${options}</select>
@@ -277,9 +285,13 @@ app.get("/queue", (req, res) => {
           <button class="btn go" type="submit">Save</button>
         </form></td>
       </tr>`;
-      })
-      .join("");
-    body = `<table><tr><th>Sent</th><th>Company</th><th>Role</th><th></th><th>Pipeline</th></tr>${body}</table>`;
+    };
+    body = active.map(row).join("");
+    if (dead.length) {
+      body += `<tr class="divider"><td colspan="6">Rejected (${dead.length})</td></tr>` + dead.map(row).join("");
+    }
+    body = `<p class="muted">${active.length} in play · ${dead.length} rejected</p>
+      <table><tr><th>Sent</th><th>Company</th><th>Role</th><th>Status</th><th></th><th>Pipeline</th></tr>${body}</table>`;
   } else {
     const filter = String(req.query.f ?? "all");
     const readyCount = queueRows.filter((r) => r.job.status === "awaiting_approval").length;
@@ -360,6 +372,10 @@ app.get("/queue", (req, res) => {
   .muted{color:#78716c;font-size:.85rem}
   .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:.75rem;font-weight:600;white-space:nowrap}
   .pill.ok{background:#dcfce7;color:#166534} .pill.wait{background:#e7e5e4;color:#78716c} .pill.low{background:#fee2e2;color:#991b1b}
+  .pill.info{background:#dbeafe;color:#1e40af}
+  tr.dead td{background:#fafaf9;color:#a8a29e} tr.dead td a{color:#a8a29e}
+  tr.dead .pill.low{background:#fee2e2;color:#b91c1c;opacity:.75}
+  tr.divider td{background:#f5f5f4;color:#78716c;font-weight:600;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;padding:6px 10px}
   .edge{font-size:.78rem;max-width:420px}
   tr.ready td{background:#f0fdf4}
   .chips{margin:10px 0}
