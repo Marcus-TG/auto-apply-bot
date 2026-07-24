@@ -86,6 +86,7 @@ async function main() {
     log(`loaded ${fields.custom!.length} custom answers`);
   }
 
+  const startedAt = Date.now(); // codes can arrive at fill time (inline gate), not just post-click
   const { chromium } = await import("playwright");
   const browser = await chromium.launch();
   const page = await browser.newPage();
@@ -139,7 +140,14 @@ async function main() {
             : ats === "jazzhr"
               ? JAZZHR_SUBMIT
               : GREENHOUSE_SUBMIT;
-    await page.locator(submitSel).last().click();
+    await page.locator(submitSel).last().click().catch(async (e) => {
+      // Some Greenhouse boards render the security-code gate inline and keep the
+      // submit button disabled until the code is entered; fall through to the
+      // code loop instead of failing on the dead click.
+      const body = ((await page.locator("body").innerText().catch(() => "")) ?? "").toLowerCase();
+      if (!/security code|verification code/.test(body)) throw e;
+      log("submit button gated behind inline security code — entering code flow");
+    });
     await page.waitForTimeout(4000);
 
     // Success, or a Greenhouse security-code gate — poll for the emailed code
@@ -221,7 +229,7 @@ async function main() {
         await page.screenshot({ path: resolve(ART, "postsubmit.png") });
         log("no confirmation and no code gate — inspect postsubmit.png");
       }
-      const code = readCode() || courierCode(clickedAt, job.company);
+      const code = readCode() || courierCode(startedAt, job.company);
       if (code && code !== lastTried) {
         lastTried = code;
         log(`entering code ${code}`);
