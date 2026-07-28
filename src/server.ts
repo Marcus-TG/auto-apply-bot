@@ -77,6 +77,21 @@ app.get("/artifacts/:jobId/:file", (req, res) => {
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
+/**
+ * The live-view URL for a job the bot parked mid-application, if that browser
+ * is probably still up. Remote sessions die on their own inactivity timeout,
+ * so a link older than that window is stale and gets hidden rather than shown
+ * as a dead button.
+ */
+function liveHandoff(jobId: string): { url: string; reason: string } | null {
+  const ev = events.latestForJob(jobId, "live_view_handoff");
+  const url = ev?.data.liveViewUrl;
+  if (!ev || typeof url !== "string" || !url) return null;
+  const ttlMs = (Number(ev.data.expiresInSeconds) || 0) * 1000;
+  if (ttlMs && Date.now() - new Date(ev.at).getTime() > ttlMs) return null;
+  return { url, reason: String(ev.data.reason ?? "paused for a human") };
+}
+
 app.get("/review/:jobId", (req, res) => {
   const jobId = req.params.jobId;
   const job = jobs.get(jobId);
@@ -232,7 +247,7 @@ app.get("/queue", (req, res) => {
     );
   // needs_human jobs sit here too: same queue, just applied by hand.
   const approvedRows = [...jobs.byStatus("approved"), ...jobs.byStatus("needs_human")]
-    .map((j) => ({ job: j, score: scores.get(j.id) }))
+    .map((j) => ({ job: j, score: scores.get(j.id), handoff: liveHandoff(j.id) }))
     .filter((r) => r.score);
   const sentRows = submissions.all().map((s) => ({
     sub: s,
@@ -246,19 +261,24 @@ app.get("/queue", (req, res) => {
   if (tab === "approved") {
     body = approvedRows
       .map(
-        ({ job, score }) => `<tr>
+        ({ job, score, handoff }) => `<tr>
         <td><b>${score!.overall}</b></td>
         <td>${esc(job.company)}${job.status === "needs_human" ? ' <span class="muted">(manual)</span>' : ""}</td>
         <td><a href="${esc(job.url)}">${esc(job.title.trim())}</a></td>
         <td>${esc(job.location ?? "")}</td>
-        <td><a class="btn go" href="${baseUrl()}/review/${job.id}">Materials</a>
+        <td>${
+          handoff
+            ? `<a class="btn go" href="${esc(handoff.url)}" target="_blank" title="${esc(handoff.reason)}">Take over</a> `
+            : ""
+        }<a class="btn go" href="${baseUrl()}/review/${job.id}">Materials</a>
             <a class="btn ok" href="${baseUrl()}/mark-sent/${job.id}">Mark sent</a>
             <a class="btn no" href="${baseUrl()}/reject-job/${job.id}?from=approved">Withdraw</a></td>
       </tr>`,
       )
       .join("");
     body = `<p class="muted">These submit in the next apply session. Rows tagged (manual) need a hand-filed
-      application; use <b>Mark sent</b> after you submit one yourself.</p>
+      application; use <b>Mark sent</b> after you submit one yourself. <b>Take over</b> opens the paused
+      browser where the bot stopped (captcha or a question it wouldn't guess) so you can finish it there.</p>
       <table><tr><th>Fit</th><th>Company</th><th>Role</th><th>Location</th><th></th></tr>${body}</table>`;
   } else if (tab === "sent") {
     // Rejections sink below a divider so the live pipeline stays on top;

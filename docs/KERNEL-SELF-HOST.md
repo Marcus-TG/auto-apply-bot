@@ -52,11 +52,37 @@ this project's posture (ATS-direct sources, CAPTCHA handoff, polite rate limits)
 that's an acceptable trade — you're not trying to out-run detection in the first
 place.
 
+## How the CAPTCHA handoff actually works
+
+Policy is unchanged: we **detect** challenges and hand them to a human, we never
+solve them. What makes the handoff usable is that the session survives it.
+
+1. `detectChallenge` (or an unanswerable required field) → `needs_human`.
+2. `submitApplication` **detaches** instead of closing: Playwright disconnects,
+   the remote browser and its live view stay up. Closing here would destroy the
+   Kernel session and the link would be dead on arrival.
+3. A `live_view_handoff` event records the URL, session id and TTL.
+4. The **Take over** button on the queue's Approved tab opens that live view, so
+   you finish the form in the same browser the bot was using — session, cookies
+   and filled fields intact. Finish it, then hit **Mark sent**.
+
+The link hides itself once `KERNEL_TIMEOUT_SECONDS` has elapsed, since the
+provider reaps idle sessions by then. That timeout is an *inactivity* timer and
+opening the live view counts as activity — but the default **300s is short for a
+handoff you might not see for an hour**. Raise `KERNEL_TIMEOUT_SECONDS` (1800+)
+if you want time to react; unclaimed sessions still expire on their own, so a
+missed handoff can't bill forever.
+
 ## Recommendation
 
 - **Start on `local`** to build and test the whole loop with no external browser infra.
 - **Move to `kernel-selfhost`** for real runs — free, Apache-2.0, gives you the live
   view for CAPTCHA takeover and recordings for debugging.
 - **Consider `kernel-cloud`** only if you later need many parallel sessions or their
-  managed proxy/stealth. The `KernelCloudProvider` stub in `browser.ts` is where the
-  SDK wiring goes; nothing else changes.
+  managed proxy/stealth. `KernelCloudProvider` in `browser.ts` is fully wired against
+  `@onkernel/sdk` v0.74; it only needs `KERNEL_API_KEY` set.
+
+A note on what stealth buys you: Kernel's `stealth` reduces how often bot checks
+*fire*, it does not clear an interactive CAPTCHA once one appears. Sites like
+Workable (Turnstile at submit) will still need the human takeover above — treat
+that as the design, not a gap to engineer around.

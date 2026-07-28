@@ -42,17 +42,19 @@ export async function submitApplication(
   const provider = browserProvider();
   const session = await provider.open();
   const page = session.page;
+  // Captured so `finally` can tell a human handoff from a finished run — see there.
+  let result: SubmitResult | undefined;
 
   try {
     await page.goto(job.applyUrl ?? job.url, { waitUntil: "domcontentloaded" });
 
     if (await detectChallenge(page)) {
       events.log({ jobId: job.id, kind: "captcha_detected", data: { provider: provider.kind } });
-      return {
+      return (result = {
         status: "needs_human",
         reason: "CAPTCHA / anti-bot challenge — complete it via live view",
         liveViewUrl: session.liveViewUrl,
-      };
+      });
     }
 
     const ats = await detectAts(page);
@@ -60,17 +62,17 @@ export async function submitApplication(
     // Workday requires an applicant account + email verification codes, so it can't
     // run unattended — park it for a supervised apply session, which drives it fine.
     if (ats === "workday") {
-      return {
+      return (result = {
         status: "needs_human",
         reason: "Workday flow — needs a supervised apply session (account + verification steps)",
         liveViewUrl: session.liveViewUrl,
-      };
+      });
     }
 
     // Unknown/custom/layered sites (Phenom→iCIMS, bespoke portals) have no hardcoded
     // filler — drive them with the AI browser agent, which owns its own submit + handoff.
     if (ats === "unknown" && config.env.agenticFallback) {
-      return await runAgenticApplication(page, job, app, fields, session.liveViewUrl);
+      return (result = await runAgenticApplication(page, job, app, fields, session.liveViewUrl));
     }
 
     const outcome = await runFiller(ats, page, fields, app);
@@ -78,11 +80,11 @@ export async function submitApplication(
     // Anything unresolved → stop and ask the human. Never submit a partial form.
     if (!outcome.ready) {
       events.log({ jobId: job.id, kind: "needs_human_fields", data: { unresolved: outcome.unresolved } });
-      return {
+      return (result = {
         status: "needs_human",
         reason: `unresolved required fields: ${outcome.unresolved.join(", ")}`,
         liveViewUrl: session.liveViewUrl,
-      };
+      });
     }
 
     // Save a pre-submit screenshot for the audit trail.
@@ -90,13 +92,17 @@ export async function submitApplication(
 
     if (config.env.dryRun) {
       events.log({ jobId: job.id, kind: "dry_run_submit", data: { ats } });
-      return { status: "submitted", confirmation: "DRY_RUN (not actually submitted)" };
+      return (result = { status: "submitted", confirmation: "DRY_RUN (not actually submitted)" });
     }
 
     const submitSel = ats === "lever" ? LEVER_SUBMIT : GREENHOUSE_SUBMIT;
     const submitBtn = page.locator(submitSel).first();
     if (!(await submitBtn.count())) {
-      return { status: "needs_human", reason: "submit button not found", liveViewUrl: session.liveViewUrl };
+      return (result = {
+        status: "needs_human",
+        reason: "submit button not found",
+        liveViewUrl: session.liveViewUrl,
+      });
     }
     await submitBtn.click();
     await page.waitForLoadState("networkidle").catch(() => {});
@@ -108,12 +114,31 @@ export async function submitApplication(
     const confirmation = await readConfirmation(page);
     submissions.record(job.id, confirmation);
     events.log({ jobId: job.id, kind: "submitted", data: { ats, confirmation } });
-    return { status: "submitted", confirmation };
+    return (result = { status: "submitted", confirmation });
   } catch (err) {
     events.log({ jobId: job.id, kind: "submit_error", data: { error: String(err) } });
-    return { status: "failed", error: String(err) };
+    return (result = { status: "failed", error: String(err) });
   } finally {
-    await session.close();
+    // A handoff is only real if the browser survives it: closing a Kernel session
+    // kills the live view before the human can open it. Detach (leave the remote
+    // session up) whenever we're parking the job with somewhere to take over.
+    const handoff = result?.status === "needs_human" && !!result.liveViewUrl;
+    if (handoff) {
+      events.log({
+        jobId: job.id,
+        kind: "live_view_handoff",
+        data: {
+          liveViewUrl: (result as { liveViewUrl: string }).liveViewUrl,
+          sessionId: session.sessionId,
+          provider: provider.kind,
+          expiresInSeconds: config.env.kernelTimeoutSeconds,
+          reason: (result as { reason: string }).reason,
+        },
+      });
+      await session.detach();
+    } else {
+      await session.close();
+    }
   }
 }
 

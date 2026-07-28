@@ -21,7 +21,17 @@ export interface BrowserSession {
   page: Page;
   /** URL a human can open to watch / take over (live view). Null for headless local. */
   liveViewUrl: string | null;
+  /** Opaque remote session id, for logging/reaping. Null when there's no remote. */
+  sessionId: string | null;
   close(): Promise<void>;
+  /**
+   * Release OUR Playwright connection but leave the remote browser running, so a
+   * human can still open `liveViewUrl` and finish the form. Only meaningful for
+   * remote providers; falls back to close() when there's nothing to hand off to.
+   * The session still dies on the provider's own inactivity timeout — a live-view
+   * connection counts as activity, so a human who opens it keeps it alive.
+   */
+  detach(): Promise<void>;
 }
 
 export interface BrowserProvider {
@@ -42,13 +52,11 @@ class LocalProvider implements BrowserProvider {
       viewport: { width: 1440, height: 900 },
     });
     const page = await context.newPage();
-    return {
-      page,
-      liveViewUrl: null,
-      close: async () => {
-        await browser.close();
-      },
+    const close = async () => {
+      await browser.close();
     };
+    // Nothing to hand off to locally — a detached headless browser would just leak.
+    return { page, liveViewUrl: null, sessionId: null, close, detach: close };
   }
 }
 
@@ -64,13 +72,17 @@ class KernelSelfHostProvider implements BrowserProvider {
     const browser = await chromium.connectOverCDP(config.env.kernelCdpUrl);
     const context = browser.contexts()[0] ?? (await browser.newContext());
     const page = context.pages()[0] ?? (await context.newPage());
+    // Releasing our CDP connection never stops the container, so close and
+    // detach are the same thing here — the live view stays up either way.
+    const release = async () => {
+      await browser.close().catch(() => {});
+    };
     return {
       page,
       liveViewUrl: config.env.kernelLiveViewUrl || null,
-      close: async () => {
-        // Don't kill the shared container; just release the page/context.
-        await browser.close();
-      },
+      sessionId: null,
+      close: release,
+      detach: release,
     };
   }
 }
@@ -114,10 +126,17 @@ class KernelCloudProvider implements BrowserProvider {
     return {
       page,
       liveViewUrl: kb.browser_live_view_url ?? null,
+      sessionId: kb.session_id,
       close: async () => {
         // Disconnect Playwright, then release the Kernel session so billing stops.
         await browser.close().catch(() => {});
         await kernel.browsers.deleteByID(kb.session_id).catch(() => {});
+      },
+      detach: async () => {
+        // Human takeover: drop our CDP connection but leave the session (and its
+        // live view) up. Kernel reaps it on KERNEL_TIMEOUT_SECONDS of inactivity,
+        // so an unclaimed handoff can't bill forever.
+        await browser.close().catch(() => {});
       },
     };
   }
