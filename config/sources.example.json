@@ -54,6 +54,13 @@
       "enabled": true,
       "queries": ["marketing manager @ toronto"],
       "notes": "Official API; blocked until ADZUNA_APP_ID/ADZUNA_APP_KEY are set (free key at developer.adzuna.com). Query syntax: 'what @ where'."
+    },
+    {
+      "kind": "builtin",
+      "enabled": true,
+      "queries": ["IT support"],
+      "countries": ["CAN"],
+      "notes": "Built In (builtin.com) aggregator, scraped from server-rendered search pages (no official API). Job pages carry the direct external ATS apply URL. countries = ISO3 codes for the country= filter; omit for worldwide."
     }
   ]
 }

@@ -21,6 +21,7 @@ export const SourceKind = z.enum([
   "remotive", // aggregator, public API (link back to their URL; poll sparingly)
   "weworkremotely", // aggregator, public RSS
   "adzuna", // aggregator, official API — gated behind ADZUNA_APP_ID/KEY
+  "builtin", // aggregator, scraped server-rendered pages; carries direct ATS apply URLs
   "manual",
 ]);
 export type SourceKind = z.infer<typeof SourceKind>;

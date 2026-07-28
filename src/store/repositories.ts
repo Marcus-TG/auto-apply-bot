@@ -61,6 +61,35 @@ export const jobs = {
     return !!db().prepare(`SELECT 1 FROM jobs WHERE id=?`).get(id);
   },
 
+  /** Posting URLs already stored for a source — lets adapters whose identity
+   *  fields need a detail fetch (builtin) skip pages they've already seen. */
+  urlsBySource(source: string): string[] {
+    return (
+      db().prepare(`SELECT url FROM jobs WHERE source=?`).all(source) as { url: string }[]
+    ).map((r) => r.url);
+  },
+
+  /** Lightweight identity rows for the cross-source dupe index. */
+  identities(): {
+    id: string;
+    source: string;
+    company: string;
+    title: string;
+    location: string | null;
+    status: JobStatus;
+  }[] {
+    return db()
+      .prepare(`SELECT id, source, company, title, location, status FROM jobs`)
+      .all() as {
+      id: string;
+      source: string;
+      company: string;
+      title: string;
+      location: string | null;
+      status: JobStatus;
+    }[];
+  },
+
   /** Job count per status — the pipeline-progress numbers for the board. */
   statusCounts(): Record<string, number> {
     const rows = db().prepare(`SELECT status, COUNT(*) AS n FROM jobs GROUP BY status`).all() as {
@@ -262,6 +291,14 @@ export const events = {
     db()
       .prepare(`INSERT INTO events (job_id, kind, at, data) VALUES (?,?,?,?)`)
       .run(e.jobId ?? null, e.kind, e.at ?? now(), JSON.stringify(e.data ?? {}));
+  },
+
+  /** Most recent event of a kind for a job — e.g. the live-view handoff link. */
+  latestForJob(jobId: string, kind: string): { at: string; data: Record<string, unknown> } | undefined {
+    const r = db()
+      .prepare(`SELECT at, data FROM events WHERE job_id=? AND kind=? ORDER BY at DESC LIMIT 1`)
+      .get(jobId, kind) as { at: string; data: string } | undefined;
+    return r ? { at: r.at, data: JSON.parse(r.data) as Record<string, unknown> } : undefined;
   },
 };
 

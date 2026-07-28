@@ -88,10 +88,20 @@ async function checkJob(job: JobPosting, ashbyBoards: Map<string, Set<string> | 
     case "ashby":
       return ashbyVerdict(job, ashbyBoards);
     case "workday": {
-      if (!raw.tenant || !raw.wd || !raw.site || !raw.externalPath) break;
+      // Directly-discovered rows carry cxs coordinates in raw; aggregator-sourced
+      // rows (builtin) only have the public URL, so derive them from it. The
+      // public page 200s even for closed postings — only the cxs API is truthful.
+      let { tenant, wd, site, externalPath } = raw;
+      if (!tenant || !wd || !site || !externalPath) {
+        const m = /^https:\/\/([^.]+)\.(wd\d+)\.myworkdayjobs\.com\/(?:[a-z]{2}-[A-Z]{2}\/)?([^/?#]+)(\/job\/[^?#]+)/.exec(
+          job.applyUrl ?? job.url,
+        );
+        if (m) [, tenant, wd, site, externalPath] = m;
+      }
+      if (!tenant || !wd || !site || !externalPath) break;
       return verdictFromApi(
         await fetchStatus(
-          `https://${raw.tenant}.${raw.wd}.myworkdayjobs.com/wday/cxs/${raw.tenant}/${raw.site}${raw.externalPath}`,
+          `https://${tenant}.${wd}.myworkdayjobs.com/wday/cxs/${tenant}/${site}${externalPath}`,
         ),
       );
     }
