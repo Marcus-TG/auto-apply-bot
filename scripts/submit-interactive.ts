@@ -93,6 +93,12 @@ async function main() {
   try {
     await page.goto(job.applyUrl ?? job.url, { waitUntil: "domcontentloaded", timeout: 60000 });
     await page.waitForTimeout(2000);
+    // React-rendered boards (Greenhouse embed, Ashby) can mount the form well
+    // after domcontentloaded; give the first real form control time to appear.
+    await page
+      .waitForSelector('input[type="file"], input[role="combobox"], select', { timeout: 15000 })
+      .catch(() => {});
+    log(`landed on ${page.url()}`);
     if (await detectChallenge(page)) throw new Error("blocking captcha/interstitial — hand off to human");
     const bodyText = ((await page.locator("body").innerText().catch(() => "")) ?? "").toLowerCase();
     if (/page not found|no longer (open|accepting)|job you.re looking for/.test(bodyText)) {
