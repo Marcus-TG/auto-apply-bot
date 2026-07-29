@@ -1,5 +1,5 @@
 {
-  "name": "auto-apply · discovery cron",
+  "name": "auto-apply · pipeline cron",
   "nodes": [
     {
       "parameters": {
@@ -9,67 +9,129 @@
       "name": "Every 6h",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [240, 300]
+      "position": [0, 0]
     },
     {
       "parameters": {
         "method": "POST",
         "url": "={{ $env.WORKER_BASE_URL }}/run/discover",
         "sendHeaders": true,
-        "headerParameters": { "parameters": [{ "name": "x-webhook-secret", "value": "={{ $env.WEBHOOK_SECRET }}" }] }
+        "headerParameters": { "parameters": [{ "name": "x-webhook-secret", "value": "={{ $env.WEBHOOK_SECRET }}" }] },
+        "options": { "timeout": 300000 }
       },
       "id": "discover",
       "name": "POST /run/discover",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [480, 300]
+      "position": [240, 0],
+      "executeOnce": true
     },
     {
       "parameters": {
         "method": "POST",
         "url": "={{ $env.WORKER_BASE_URL }}/run/score",
         "sendHeaders": true,
-        "headerParameters": { "parameters": [{ "name": "x-webhook-secret", "value": "={{ $env.WEBHOOK_SECRET }}" }] }
+        "headerParameters": { "parameters": [{ "name": "x-webhook-secret", "value": "={{ $env.WEBHOOK_SECRET }}" }] },
+        "options": { "timeout": 3600000 }
       },
       "id": "score",
       "name": "POST /run/score",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [720, 300]
+      "position": [480, 0],
+      "executeOnce": true
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.WORKER_BASE_URL }}/run/tailor",
+        "url": "={{ $env.WORKER_BASE_URL }}/run/scrub",
         "sendHeaders": true,
-        "headerParameters": { "parameters": [{ "name": "x-webhook-secret", "value": "={{ $env.WEBHOOK_SECRET }}" }] }
+        "headerParameters": { "parameters": [{ "name": "x-webhook-secret", "value": "={{ $env.WEBHOOK_SECRET }}" }] },
+        "options": { "timeout": 900000 }
       },
-      "id": "tailor",
-      "name": "POST /run/tailor",
+      "id": "scrub",
+      "name": "POST /run/scrub",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [960, 300]
+      "position": [600, 160],
+      "retryOnFail": false,
+      "maxTries": 2,
+      "waitBetweenTries": 5000,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.WORKER_BASE_URL }}/run/refine",
+        "sendHeaders": true,
+        "headerParameters": { "parameters": [{ "name": "x-webhook-secret", "value": "={{ $env.WEBHOOK_SECRET }}" }] },
+        "options": { "timeout": 3600000 }
+      },
+      "id": "refine",
+      "name": "POST /run/refine",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [840, 160],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
     },
     {
       "parameters": {
         "method": "POST",
         "url": "={{ $env.WORKER_BASE_URL }}/run/sweep",
         "sendHeaders": true,
-        "headerParameters": { "parameters": [{ "name": "x-webhook-secret", "value": "={{ $env.WEBHOOK_SECRET }}" }] }
+        "headerParameters": { "parameters": [{ "name": "x-webhook-secret", "value": "={{ $env.WEBHOOK_SECRET }}" }] },
+        "options": { "timeout": 60000 }
       },
       "id": "sweep",
       "name": "POST /run/sweep",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1200, 300]
+      "position": [720, 0],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $('POST /run/score').all();\nconst review = items.filter(i => i.json && i.json.lane === 'review').length;\n// Returning no items stops the chain: no digest ping on quiet runs.\nif (review === 0) return [];\nreturn [{ json: { review } }];"
+      },
+      "id": "count",
+      "name": "Count new review-lane jobs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.DISCORD_WEBHOOK_URL }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ ({ content: $json.review + \" new job\" + ($json.review === 1 ? \"\" : \"s\") + \" cleared the bar — review queue: http://aria:8787/queue\" }) }}",
+        "options": {}
+      },
+      "id": "digest",
+      "name": "Discord digest ping",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1200, 0],
+      "executeOnce": true,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2500
     }
   ],
   "connections": {
     "Every 6h": { "main": [[{ "node": "POST /run/discover", "type": "main", "index": 0 }]] },
     "POST /run/discover": { "main": [[{ "node": "POST /run/score", "type": "main", "index": 0 }]] },
-    "POST /run/score": { "main": [[{ "node": "POST /run/tailor", "type": "main", "index": 0 }]] },
-    "POST /run/tailor": { "main": [[{ "node": "POST /run/sweep", "type": "main", "index": 0 }]] }
+    "POST /run/score": { "main": [[{ "node": "POST /run/scrub", "type": "main", "index": 0 }]] },
+    "POST /run/scrub": { "main": [[{ "node": "POST /run/refine", "type": "main", "index": 0 }]] },
+    "POST /run/refine": { "main": [[{ "node": "POST /run/sweep", "type": "main", "index": 0 }]] },
+    "POST /run/sweep": { "main": [[{ "node": "Count new review-lane jobs", "type": "main", "index": 0 }]] },
+    "Count new review-lane jobs": { "main": [[{ "node": "Discord digest ping", "type": "main", "index": 0 }]] }
   },
-  "settings": {},
-  "meta": { "note": "Set WORKER_BASE_URL and WEBHOOK_SECRET as n8n env vars. Tailoring emits approval cards to the approval workflow's webhook." }
+  "settings": { "executionOrder": "v1", "saveDataErrorExecution": "all" },
+  "meta": {
+    "note": "Sanitized export of the live workflow. Set WORKER_BASE_URL, WEBHOOK_SECRET and DISCORD_WEBHOOK_URL as n8n env vars. Chain: discover → score → scrub → refine → sweep → digest. Scrub is onError:continueRegularOutput on purpose: it re-checks the whole queue and can outrun its timeout, and refine (hire-odds) sits downstream, so a slow scrub must never starve it. Tailoring is not in this chain; it runs on demand."
+  }
 }
