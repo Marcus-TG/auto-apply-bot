@@ -16,6 +16,7 @@ import { browserProvider } from "./browser.js";
 import { detectAts } from "./ats-detect.js";
 import { detectChallenge } from "./captcha.js";
 import { buildFields, type ApplicantFields } from "./field-map.js";
+import { fillBambooHR } from "./fillers/bamboohr.js";
 import { fillGeneric, type FillOutcome } from "./fillers/generic.js";
 import { fillGreenhouse, GREENHOUSE_SUBMIT } from "./fillers/greenhouse.js";
 import { fillLever, LEVER_SUBMIT } from "./fillers/lever.js";
@@ -154,6 +155,8 @@ async function runFiller(
       return fillGreenhouse(page, fields, app.resumePath, coverLetter);
     case "lever":
       return fillLever(page, fields, app.resumePath, coverLetter);
+    case "bamboohr":
+      return fillBambooHR(page, fields, app.resumePath, coverLetter);
     default:
       return fillGeneric(page, fields, app.resumePath);
   }

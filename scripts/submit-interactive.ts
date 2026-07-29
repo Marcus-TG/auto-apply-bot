@@ -28,6 +28,7 @@ import { fillLever, LEVER_SUBMIT } from "../src/apply/fillers/lever.js";
 import { fillAshby } from "../src/apply/fillers/ashby.js";
 import { fillWorkable, WORKABLE_SUBMIT } from "../src/apply/fillers/workable.js";
 import { fillJazzHR, JAZZHR_SUBMIT } from "../src/apply/fillers/jazzhr.js";
+import { fillBambooHR, BAMBOO_SUBMIT } from "../src/apply/fillers/bamboohr.js";
 import { detectAts } from "../src/apply/ats-detect.js";
 import { detectChallenge } from "../src/apply/captcha.js";
 
@@ -116,7 +117,9 @@ async function main() {
             ? await fillWorkable(page, fields, app.resumePath)
             : ats === "jazzhr"
               ? await fillJazzHR(page, fields, app.resumePath, coverLetter)
-              : await fillGreenhouse(page, fields, app.resumePath, coverLetter);
+              : ats === "bamboohr"
+                ? await fillBambooHR(page, fields, app.resumePath, coverLetter)
+                : await fillGreenhouse(page, fields, app.resumePath, coverLetter);
     if (!outcome.ready) {
       log(`UNRESOLVED required fields — answer these in answers.json:\n  - ${outcome.unresolved.join("\n  - ")}`);
       await page.screenshot({ path: resolve(ART, "presubmit.png"), fullPage: true });
@@ -145,7 +148,9 @@ async function main() {
             ? WORKABLE_SUBMIT
             : ats === "jazzhr"
               ? JAZZHR_SUBMIT
-              : GREENHOUSE_SUBMIT;
+              : ats === "bamboohr"
+                ? BAMBOO_SUBMIT
+                : GREENHOUSE_SUBMIT;
     await page.locator(submitSel).last().click().catch(async (e) => {
       // Some Greenhouse boards render the security-code gate inline and keep the
       // submit button disabled until the code is entered; fall through to the

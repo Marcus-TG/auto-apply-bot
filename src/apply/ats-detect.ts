@@ -12,6 +12,7 @@ export type AtsKind =
   | "workday"
   | "workable"
   | "jazzhr"
+  | "bamboohr"
   | "unknown";
 
 export function atsFromUrl(url: string): AtsKind {
@@ -21,6 +22,7 @@ export function atsFromUrl(url: string): AtsKind {
   if (/myworkdayjobs\.com/.test(url)) return "workday";
   if (/apply\.workable\.com/.test(url)) return "workable";
   if (/applytojob\.com/.test(url)) return "jazzhr";
+  if (/bamboohr\.com/.test(url)) return "bamboohr";
   return "unknown";
 }
 
