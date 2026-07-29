@@ -29,6 +29,7 @@ import {
   runPipeline,
 } from "./orchestrator/pipeline.js";
 import { resolveApproval, sweepExpiredApprovals } from "./approval/index.js";
+import { laneFor } from "./scoring/lanes.js";
 import { buildSweepQuery, processSweep, type SweepMessage } from "./followups/sweep.js";
 
 initSchema();
@@ -83,6 +84,15 @@ const esc = (s: string) =>
  * so a link older than that window is stale and gets hidden rather than shown
  * as a dead button.
  */
+/** Marks rows belonging to a career lane, so a low odds number reads as
+ *  "different market, judged on its own floor" rather than "bad job". */
+function laneBadge(job: { title: string; location: string | null }): string {
+  const lane = laneFor(job);
+  return lane
+    ? ` <span class="pill info" title="${esc(lane.note ?? lane.label)}">${esc(lane.label)}</span>`
+    : "";
+}
+
 function liveHandoff(jobId: string): { url: string; reason: string } | null {
   const ev = events.latestForJob(jobId, "live_view_handoff");
   const url = ev?.data.liveViewUrl;
@@ -215,6 +225,16 @@ app.get("/queue", (req, res) => {
         (b.odds?.odds ?? b.score!.overall) - (a.odds?.odds ?? a.score!.overall) ||
         b.score!.overall - a.score!.overall, // fit breaks odds ties
     },
+    // The income lane scores below the general market by construction (it's a
+    // pivot, so fit is lower and odds follow), which means a pure odds sort
+    // buries the exact roles the lane exists to surface. This sort floats it.
+    lane: {
+      label: "Income lane first",
+      cmp: (a, b) =>
+        Number(!!laneFor(b.job)) - Number(!!laneFor(a.job)) ||
+        (b.odds?.odds ?? b.score!.overall) - (a.odds?.odds ?? a.score!.overall) ||
+        b.score!.overall - a.score!.overall,
+    },
     fit: {
       label: "Fit",
       cmp: (a, b) => b.score!.overall - a.score!.overall || (b.odds?.odds ?? 0) - (a.odds?.odds ?? 0),
@@ -236,7 +256,9 @@ app.get("/queue", (req, res) => {
       cmp: (a, b) => a.job.company.localeCompare(b.job.company) || (b.odds?.odds ?? 0) - (a.odds?.odds ?? 0),
     },
   };
-  const sortKey = SORTS[String(req.query.sort ?? "")] ? String(req.query.sort) : "odds";
+  // Defaults to the income lane: a pure odds sort ranks the pivot roles last by
+  // construction, which is what kept them invisible. Switch with the Sort chips.
+  const sortKey = SORTS[String(req.query.sort ?? "")] ? String(req.query.sort) : "lane";
   const queueRows = [...jobs.byStatus("scored"), ...jobs.byStatus("awaiting_approval")]
     .map((j) => ({ job: j, score: scores.get(j.id), odds: refinements.get(j.id) }))
     .filter((r): r is QueueRow & { score: NonNullable<QueueRow["score"]> } => !!r.score)
@@ -365,7 +387,7 @@ app.get("/queue", (req, res) => {
         <td>${oddsCell}</td>
         <td><b>${score!.overall}</b></td>
         <td>${esc(job.company)}</td>
-        <td><a href="${esc(job.url)}">${esc(job.title.trim())}</a>${edgeLine}</td>
+        <td><a href="${esc(job.url)}">${esc(job.title.trim())}</a>${laneBadge(job)}${edgeLine}</td>
         <td>${esc(job.location ?? "")}</td>
         <td><span class="pill ${ready ? "ok" : "wait"}">${ready ? "materials ready" : "needs prep"}</span></td>
         <td>${action}</td>

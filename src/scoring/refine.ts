@@ -12,6 +12,7 @@ import { z } from "zod";
 import { config } from "../config/index.js";
 import { callStructured } from "../llm/client.js";
 import { jobs, scores, refinements, events, type Refinement } from "../store/repositories.js";
+import { bucketOf, trackRecordBlock } from "./track-record.js";
 import type { JobPosting } from "../types/index.js";
 
 const RefineOutput = z.object({
@@ -43,6 +44,12 @@ Weigh, in rough order of importance:
    experience-scale mismatch. Stay consistent with the fit scorer's gap list you are given: gaps
    like "team leadership", "at scale", or "X+ years" mean the seniority penalty applies.
 5. Freshness. Postings older than ~45 days likely have deep pipelines or are stale.
+6. Observed outcomes. When given a track record of applications already sent, use it to rank
+   postings RELATIVE to each other: categories that keep getting screened out within days
+   should fall BELOW comparable postings from categories that don't. It is evidence about
+   target selection, not proof that everything is hopeless — a uniformly low spread is a
+   failed ranking. Never penalize a category the candidate simply hasn't applied to yet;
+   untested is not failed, and those are judged on the posting alone.
 
 odds is a 0-100 ranking signal, not a literal probability. Spread scores out — if everything
 lands 40-60 the ranking is useless. Before returning anything above 70, re-verify each factor
@@ -53,18 +60,27 @@ if odds are low).`;
 export async function refineJob(
   job: JobPosting & { status?: string },
   profile: unknown,
+  /** Precomputed track record — pass it when refining a batch so the outcome
+   *  query runs once instead of once per job. */
+  trackRecord?: string | null,
 ): Promise<Refinement> {
   const score = scores.get(job.id);
   const ageDays = job.postedAt
     ? Math.max(0, Math.round((Date.now() - Date.parse(job.postedAt)) / 86_400_000))
     : null;
+  const record = trackRecord === undefined ? trackRecordBlock() : trackRecord;
 
   const out = await callStructured({
     model: config.env.modelPrefilter,
     system: SYSTEM,
-    cachedContext: [{ label: "Candidate profile", text: JSON.stringify(profile, null, 2) }],
+    cachedContext: [
+      { label: "Candidate profile", text: JSON.stringify(profile, null, 2) },
+      // Cached alongside the profile: identical for every job in a batch.
+      ...(record ? [{ label: "Track record so far", text: record }] : []),
+    ],
     userPrompt: `Company: ${job.company}
 Title: ${job.title}
+Outcome bucket for this posting: ${bucketOf(job)}
 Location: ${job.location ?? "n/a"} (${job.remote})
 Posting age: ${ageDays === null ? "unknown" : `${ageDays} days`}
 Fit score: ${score ? `${score.overall}/100 — ${score.summary}` : "n/a"}
@@ -115,13 +131,15 @@ export async function refineQueuedJobs(profile: unknown): Promise<{
 
   let refined = 0;
   let errors = 0;
+  // One outcome query for the whole batch; every job sees the same evidence.
+  const trackRecord = trackRecordBlock();
   const concurrency = Math.max(1, Number(process.env.REFINE_CONCURRENCY ?? 2));
   let next = 0;
   async function worker() {
     while (next < pending.length) {
       const job = pending[next++]!;
       try {
-        await refineJob(job, profile);
+        await refineJob(job, profile, trackRecord);
         refined++;
       } catch (err) {
         errors++;

@@ -42,6 +42,23 @@ const ThresholdsSchema = z.object({
   minConfidenceForAuto: z.number().min(0).max(1),
   /** Rubric dimension weights; must sum to ~1. */
   weights: z.record(z.number()),
+  /**
+   * Market slices with their own apply floor, checked in order. Exists because a
+   * flat floor rejects career-pivot lanes: see src/scoring/lanes.ts.
+   */
+  lanes: z
+    .array(
+      z.object({
+        id: z.string(),
+        label: z.string(),
+        applyFloor: z.number().min(0).max(100),
+        titlePattern: z.string(),
+        excludeTitlePattern: z.string().optional(),
+        locationPattern: z.string().optional(),
+        note: z.string().optional(),
+      }),
+    )
+    .default([]),
   /** Hours to wait for a human decision before the run times out to "hold". */
   approvalTimeoutHours: z.number().positive(),
 });
