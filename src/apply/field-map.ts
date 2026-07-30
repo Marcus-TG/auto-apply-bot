@@ -99,9 +99,11 @@ export function answerFor(label: string, fields: ApplicantFields): string | null
   for (const c of fields.custom ?? []) {
     if (l.includes(c.match.toLowerCase())) return c.value;
   }
+  // "First and Last Name" must resolve to the full name, so the combined form
+  // is checked before the bare /first name/ and /last name/ rules.
+  if (/full name|first and last|^name$/.test(l)) return fields.fullName;
   if (/first name/.test(l)) return fields.firstName;
   if (/last name/.test(l)) return fields.lastName;
-  if (/full name|^name$/.test(l)) return fields.fullName;
   if (/email/.test(l)) return fields.email;
   if (/phone/.test(l)) return fields.phone;
   if (/linkedin/.test(l)) return fields.linkedin ?? null;

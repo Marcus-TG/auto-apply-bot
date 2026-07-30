@@ -121,7 +121,28 @@ export async function fillAshby(
         appeared = await opt.waitFor({ timeout: 5000 }).then(() => true).catch(() => false);
       }
       if (appeared) await opt.click().catch(() => {});
-      else if (required) unresolved.push(`${label} (no option matching "${value}")`);
+      else if (required) {
+        // Surface the real option list so the operator can fix answers.json
+        // in one pass instead of guessing.
+        // These comboboxes only populate after a keystroke; a vowel matches
+        // nearly every option list.
+        let opts: string[] = [];
+        for (const probe of ["e", "a"]) {
+          await box.fill("").catch(() => {});
+          await box.pressSequentially(probe, { delay: 40 }).catch(() => {});
+          await page.waitForTimeout(1200);
+          opts = await page
+            .locator('[role="option"]:visible')
+            .allInnerTexts()
+            .then((ts) => ts.map((t) => t.trim()).filter(Boolean))
+            .catch(() => [] as string[]);
+          if (opts.length) break;
+        }
+        await box.fill("").catch(() => {});
+        const hint = opts.length ? `; options: ${opts.slice(0, 12).join(" | ")}` : "";
+        unresolved.push(`${label} (no option matching "${value}"${hint})`);
+        await page.keyboard.press("Escape").catch(() => {});
+      }
       continue;
     }
 
@@ -163,15 +184,27 @@ async function clickOptionByLabel(
   value: string,
 ): Promise<boolean> {
   const count = await radios.count();
+  const v = value.trim().toLowerCase();
+  let fallback = -1;
   for (let i = 0; i < count; i++) {
     const id = await radios.nth(i).getAttribute("id");
     if (!id) continue;
     const lab = entry.locator(`label[for="${id}"]`);
-    const text = ((await lab.innerText().catch(() => "")) ?? "").trim();
-    if (text.toLowerCase() === value.toLowerCase()) {
+    const text = ((await lab.innerText().catch(() => "")) ?? "").trim().toLowerCase();
+    if (text === v) {
       await (await lab.count() ? lab : radios.nth(i)).click().catch(() => {});
       return true;
     }
+    // Long values may be a truncation of the full label ("I have read and
+    // acknowledge…" vs the label's trailing policy name). Too-short values
+    // ("No") must never prefix-match an unrelated option.
+    if (fallback < 0 && v.length >= 8 && text.startsWith(v)) fallback = i;
+  }
+  if (fallback >= 0) {
+    const id = await radios.nth(fallback).getAttribute("id");
+    const lab = entry.locator(`label[for="${id}"]`);
+    await (await lab.count() ? lab : radios.nth(fallback)).click().catch(() => {});
+    return true;
   }
   return false;
 }
