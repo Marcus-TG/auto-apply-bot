@@ -18,6 +18,9 @@ const now = () => new Date().toISOString();
 
 // ---------- jobs ----------
 export const jobs = {
+  // Re-upserts refresh description/url/compensation, but an apply_url that
+  // diverges from url is an operator override (resolved aggregator → real ATS)
+  // and must survive the 6-hourly discovery cron.
   upsert(job: JobPosting): void {
     db()
       .prepare(
@@ -26,7 +29,11 @@ export const jobs = {
          VALUES (@id,@source,@ats,@company,@title,@location,@remote,@url,@applyUrl,
             @description,@compensation,@postedAt,@discoveredAt,'discovered',@raw,@updatedAt)
          ON CONFLICT(id) DO UPDATE SET
-            description=excluded.description, url=excluded.url, apply_url=excluded.apply_url,
+            description=excluded.description, url=excluded.url,
+            apply_url=CASE
+              WHEN jobs.apply_url IS NULL OR jobs.apply_url = jobs.url THEN excluded.apply_url
+              ELSE jobs.apply_url
+            END,
             compensation=excluded.compensation, updated_at=excluded.updated_at`,
       )
       .run({
