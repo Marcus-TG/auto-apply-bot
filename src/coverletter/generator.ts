@@ -77,7 +77,13 @@ function cleanLetter(s: string): string {
  *  if the text already has it, so re-framing an existing letter is safe. */
 export function frameLetter(body: string, company: string, fullName: string): string {
   let text = body.trim();
-  if (!/^(hi|hello|dear)\b/i.test(text)) text = `Hi ${company} team,\n\n${text}`;
+  // "Hi Huzzle Ltd team," reads as a mail-merged field; greet with the everyday
+  // name: drop legal suffixes and any trailing parenthetical.
+  const casualName = company
+    .replace(/\s*\([^)]*\)\s*$/, "")
+    .replace(/[,.]?\s+(Inc|Ltd|LLC|Corp|Co|GmbH|PLC)\.?$/i, "")
+    .trim() || company;
+  if (!/^(hi|hello|dear)\b/i.test(text)) text = `Hi ${casualName} team,\n\n${text}`;
   const firstName = fullName.split(" ")[0]!;
   if (!text.endsWith(fullName) && !text.endsWith(firstName)) {
     text = `${text}\n\nBest,\n${fullName}`;
