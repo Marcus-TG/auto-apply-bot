@@ -33,6 +33,16 @@ Rules:
   strongest fit claim tied to a concrete fact about how this company operates.
 - Match the candidate's voice sample. No buzzwords, no "I am passionate about", no
   generic filler. Prefer concrete outcomes over adjectives.
+- The voice sample may lean aphoristic; do not amplify that. At most ONE
+  thesis/insight line in the whole letter, and never as a repeated
+  paragraph-closer. Every other sentence states a plain fact: what was built,
+  what it does, why it maps to this role. A hiring manager skimming should hit
+  concrete experience in the first two sentences, not a worldview.
+- Describe what the candidate built and how it fits THEIR stated need. Never
+  editorialize about the company's strategy, "real bet", or whether their
+  claims hold up; analysis of the employer reads as presumptuous.
+- Keep sentences under ~25 words. When covering multiple requirements, use
+  separate short sentences, not one clause-chained mega-sentence.
 - Never use em dashes or en dashes; use commas, colons, or separate sentences.
 - 3 short paragraphs, ~200-250 words. Open on a specific hook, not "Dear..." or
   "I am writing to...". Body only: no greeting line and no sign-off; the letter
@@ -111,6 +121,9 @@ ${job.description.slice(0, 4000)}`,
       system:
         "Revise the cover letter to remove any buzzwords, clichés, or generic claims, " +
         "keep only concrete points grounded in the resume, and preserve the candidate's voice. " +
+        "Cut aphoristic thesis lines down to at most one in the whole letter; paragraphs must " +
+        "not each end on a punchy insight. Remove any sentence that editorializes about the " +
+        "company's strategy or claims. Split sentences over ~25 words. " +
         "If the opening quotes a generic line from the job posting (mission-statement filler " +
         "any company could have written), replace that opening with the letter's strongest " +
         "concrete fit claim; keep a quote only if it is distinctive to this company. " +
