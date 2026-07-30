@@ -15,6 +15,21 @@ export function normalizeText(s: string): string {
   return s.toLowerCase().replace(/\s+/g, " ").replace(/[^\w\s]/g, "").trim();
 }
 
+/**
+ * "Huzzle Ltd" -> "Huzzle"; "Tecsys Inc." -> "Tecsys"; "Acme (Canada)" -> "Acme".
+ * Companies write to candidates under their everyday name — legal suffixes only
+ * appear in job-board metadata, so anything matching on the stored name must
+ * strip them first.
+ */
+export function everydayCompanyName(company: string): string {
+  return (
+    company
+      .replace(/\s*\([^)]*\)\s*$/, "")
+      .replace(/[,.]?\s+(Inc|Ltd|LLC|Corp|Co|GmbH|PLC)\.?$/i, "")
+      .trim() || company
+  );
+}
+
 /** Canonical per-source id. */
 export function makeJobId(p: Pick<JobPosting, "source" | "company" | "title" | "location">): string {
   const basis = [p.source, normalizeText(p.company), normalizeText(p.title), normalizeText(p.location ?? "")].join("|");

@@ -11,6 +11,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { config } from "../config/index.js";
 import { callText } from "../llm/client.js";
+import { everydayCompanyName } from "../normalize/dedupe.js";
 import type { RenderedResume } from "../resume/model.js";
 import type { JobPosting, FitScore } from "../types/index.js";
 
@@ -77,12 +78,8 @@ function cleanLetter(s: string): string {
  *  if the text already has it, so re-framing an existing letter is safe. */
 export function frameLetter(body: string, company: string, fullName: string): string {
   let text = body.trim();
-  // "Hi Huzzle Ltd team," reads as a mail-merged field; greet with the everyday
-  // name: drop legal suffixes and any trailing parenthetical.
-  const casualName = company
-    .replace(/\s*\([^)]*\)\s*$/, "")
-    .replace(/[,.]?\s+(Inc|Ltd|LLC|Corp|Co|GmbH|PLC)\.?$/i, "")
-    .trim() || company;
+  // "Hi Huzzle Ltd team," reads as a mail-merged field; greet with the everyday name.
+  const casualName = everydayCompanyName(company);
   if (!/^(hi|hello|dear)\b/i.test(text)) text = `Hi ${casualName} team,\n\n${text}`;
   const firstName = fullName.split(" ")[0]!;
   if (!text.endsWith(fullName) && !text.endsWith(firstName)) {

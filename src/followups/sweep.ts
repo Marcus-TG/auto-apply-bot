@@ -14,6 +14,7 @@
 import { z } from "zod";
 import { config } from "../config/index.js";
 import { callStructured } from "../llm/client.js";
+import { everydayCompanyName } from "../normalize/dedupe.js";
 import { db } from "../store/db.js";
 import { jobs, submissions, followups, events, type FollowupStatus } from "../store/repositories.js";
 
@@ -74,7 +75,8 @@ function submittedJobs(): { jobId: string; company: string; title: string; token
 
 /** Gmail search covering ATS senders + every submitted company, last `days` days. */
 export function buildSweepQuery(days = 2): string {
-  const names = [...new Set(submittedJobs().map((j) => `"${j.company.replace(/"/g, "")}"`))];
+  // Search on the everyday name: "Huzzle Ltd" never appears in mail sent as "Huzzle".
+  const names = [...new Set(submittedJobs().map((j) => `"${everydayCompanyName(j.company).replace(/"/g, "")}"`))];
   const froms = ATS_SENDER_DOMAINS.map((d) => `from:${d}`);
   return `newer_than:${days}d -in:sent -in:draft {${[...froms, ...names].join(" ")}}`;
 }
