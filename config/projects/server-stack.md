@@ -30,10 +30,17 @@ To protect the integrity of the core infrastructure, the network is segmented in
 * **Server/DMZ:** Isolated zone for public-facing Docker containers (Nginx, n8n), preventing lateral movement to the rest of the network.
 * **IoT Isolation:** All smart devices are confined to a no-internet-access VLAN, communicating only with local controllers.
 
+## Component 5: Self-Hosted LLM Inference (Multi-Node Ollama)
+Two Ollama endpoints on separate machines serve local LLM inference as a private, cost-controlled alternative to cloud APIs:
+* **Topology:** Two GPU-backed nodes each running Ollama, exposed behind the Nginx reverse proxy as a single private endpoint.
+* **Load Distribution & Failover:** Requests are distributed across both endpoints; if one node is down or busy, traffic routes to the other. The auto-apply pipeline's local scoring prefilter runs on this cluster daily.
+* **Models:** qwen3-coder:30b and task-sized smaller models per workload.
+
 ## Technical Specifications & Hardware
 * **Edge Router:** Unifi UDM (Dual-WAN Load Balancing)
 * **Aggregation Layer:** Pro XG Aggregation
 * **Access Layer:** Pro XG 48 PoE
 * **Storage Server:** Dell R710 (Media Server/NAS)
 * **App Server:** Custom Whitebox (High Performance Server)
+* **Inference Nodes:** 2x GPU-backed Ollama endpoints (load-distributed, automatic failover)
 * **Security:** VLAN/Firewall (Intra-VLAN Isolation & DMZ)
