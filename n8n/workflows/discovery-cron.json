@@ -107,7 +107,7 @@
         "url": "={{ $env.DISCORD_WEBHOOK_URL }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ ({ content: $json.review + \" new job\" + ($json.review === 1 ? \"\" : \"s\") + \" cleared the bar — review queue: http://aria:8787/queue\" }) }}",
+        "jsonBody": "={{ ({ content: $json.review + \" new job\" + ($json.review === 1 ? \"\" : \"s\") + \" cleared the bar — review queue: http://YOUR-SERVER:8787/queue\" }) }}",
         "options": {}
       },
       "id": "digest",

@@ -19,3 +19,8 @@ artifacts/
 # OS
 .DS_Store
 .claude/settings.local.json
+
+# Per-user config (examples are committed)
+config/thresholds.json
+config/projects/*
+!config/projects/example-project.md

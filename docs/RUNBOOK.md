@@ -8,7 +8,9 @@ npx playwright install chromium      # browser for PDF render + local apply
 cp .env.example .env                  # then set ANTHROPIC_API_KEY, WEBHOOK_SECRET
 cp config/profile.example.json config/profile.json   # then fill in your real details
 cp config/sources.example.json config/sources.json   # then set your company board tokens
+cp config/thresholds.example.json config/thresholds.json  # score floors & rubric weights
 # add your real resume variants under config/resume-variants/*.json
+# add project write-ups under config/projects/*.md (see example-project.md)
 npm run db:init
 ```
 

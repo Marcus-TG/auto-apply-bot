@@ -38,6 +38,7 @@ npx playwright install chromium
 cp .env.example .env                                  # pick your LLM provider (below)
 cp config/profile.example.json config/profile.json    # fill in your details
 cp config/sources.example.json config/sources.json    # companies to poll
+cp config/thresholds.example.json config/thresholds.json  # score floors & weights
 npm run db:init
 npm run pipeline        # runs discover → score → tailor → (submit; DRY_RUN by default)
 ```
@@ -83,4 +84,8 @@ to you. Turn these up deliberately as you build trust.
 - **Your profile**: `config/profile.json`.
 - **Resume variants**: `config/resume-variants/*.json` (structured, with a bullet bank).
 - **Thresholds/weights**: `config/thresholds.json`.
+- **Project write-ups**: `config/projects/*.md` — one file per project you want cover
+  letters to cite (see `example-project.md` for what to include).
+- **n8n workflows**: `n8n/workflows/*.json` — after importing, replace `YOUR-SERVER`
+  in the Discord message with your worker's hostname.
 - **New job board**: add an adapter in `src/discovery/` + register it — nothing else changes.
